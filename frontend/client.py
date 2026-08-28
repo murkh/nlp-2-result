@@ -3,8 +3,8 @@ HTTP API Client for Multi-Agent Knowledge Base Q&A Platform Backend.
 Handles communication between Streamlit UI and FastAPI backend endpoints.
 """
 
-import os
 import json
+import os
 from typing import Any, Dict, List, Optional, Union
 
 # Robust import of pandas / DataFrame
@@ -16,10 +16,12 @@ except ImportError:
 # Robust import of httpx
 try:
     import httpx
+
     _has_httpx = True
 except ImportError:
-    import urllib.request
     import urllib.error
+    import urllib.request
+
     _has_httpx = False
 
 
@@ -41,7 +43,10 @@ class BackendClient:
         query_str = ""
         if params:
             import urllib.parse
-            query_str = "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+
+            query_str = "?" + urllib.parse.urlencode(
+                {k: v for k, v in params.items() if v is not None}
+            )
         url = f"{self.base_url}{endpoint}{query_str}"
 
         last_error = None
@@ -65,7 +70,10 @@ class BackendClient:
                 except Exception as e:
                     last_error = e
 
-        return {"error": str(last_error) if last_error else "Request failed", "status": "unreachable"}
+        return {
+            "error": str(last_error) if last_error else "Request failed",
+            "status": "unreachable",
+        }
 
     def _post(
         self,
@@ -107,7 +115,10 @@ class BackendClient:
                 except Exception as e:
                     last_error = e
 
-        return {"error": str(last_error) if last_error else "Request failed", "status": "unreachable"}
+        return {
+            "error": str(last_error) if last_error else "Request failed",
+            "status": "unreachable",
+        }
 
     # -------------------------------------------------------------------------
     # System & Ingestion

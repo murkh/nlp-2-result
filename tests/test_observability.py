@@ -4,9 +4,9 @@ Tests root trace lifecycle, child spans, token consumption aggregation,
 latency tracking, local cache retrieval, and Langfuse mock integration.
 """
 
-from unittest.mock import MagicMock, patch
 import unittest
 import uuid
+from unittest.mock import MagicMock, patch
 
 from src.observability.telemetry import (
     ObservabilityManager,
@@ -198,7 +198,9 @@ class TestObservability(unittest.TestCase):
         mock_lf_client.trace.return_value = mock_lf_trace
         mock_lf_trace.span.return_value = mock_lf_span
 
-        manager = ObservabilityManager(public_key="pk_test", secret_key="sk_test", host="http://mock:3000")
+        manager = ObservabilityManager(
+            public_key="pk_test", secret_key="sk_test", host="http://mock:3000"
+        )
         manager.enabled = True
         manager.client = mock_lf_client
 

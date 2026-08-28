@@ -11,38 +11,193 @@ Supports both official Ragas library evaluation and a high-fidelity standalone e
 for offline, zero-dependency, and deterministic testing.
 """
 
-from dataclasses import dataclass, field
 import math
 import re
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
-from src.evaluation.compat import pd, np, DataFrame, Series
-
+from src.evaluation.compat import DataFrame, Series, np, pd
 
 # =============================================================================
 # Stopwords and Tokenization Helpers
 # =============================================================================
 
 DEFAULT_STOPWORDS: Set[str] = {
-    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
-    "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being",
-    "below", "between", "both", "but", "by", "can", "can't", "cannot", "could",
-    "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down",
-    "during", "each", "few", "for", "from", "further", "had", "hadn't", "has",
-    "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her",
-    "here", "here's", "hers", "herself", "him", "himself", "his", "how", "how's",
-    "i", "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it",
-    "it's", "its", "itself", "let's", "me", "more", "most", "mustn't", "my",
-    "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other",
-    "ought", "our", "ours", "ourselves", "out", "over", "own", "same", "shan't",
-    "she", "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", "such",
-    "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then",
-    "there", "there's", "these", "they", "they'd", "they'll", "they're", "they've",
-    "this", "those", "through", "to", "too", "under", "until", "up", "very", "was",
-    "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what",
-    "what's", "when", "when's", "where", "where's", "which", "while", "who", "who's",
-    "whom", "why", "why's", "with", "won't", "would", "wouldn't", "you", "you'd",
-    "you'll", "you're", "you've", "your", "yours", "yourself", "yourselves"
+    "a",
+    "about",
+    "above",
+    "after",
+    "again",
+    "against",
+    "all",
+    "am",
+    "an",
+    "and",
+    "any",
+    "are",
+    "aren't",
+    "as",
+    "at",
+    "be",
+    "because",
+    "been",
+    "before",
+    "being",
+    "below",
+    "between",
+    "both",
+    "but",
+    "by",
+    "can",
+    "can't",
+    "cannot",
+    "could",
+    "couldn't",
+    "did",
+    "didn't",
+    "do",
+    "does",
+    "doesn't",
+    "doing",
+    "don't",
+    "down",
+    "during",
+    "each",
+    "few",
+    "for",
+    "from",
+    "further",
+    "had",
+    "hadn't",
+    "has",
+    "hasn't",
+    "have",
+    "haven't",
+    "having",
+    "he",
+    "he'd",
+    "he'll",
+    "he's",
+    "her",
+    "here",
+    "here's",
+    "hers",
+    "herself",
+    "him",
+    "himself",
+    "his",
+    "how",
+    "how's",
+    "i",
+    "i'd",
+    "i'll",
+    "i'm",
+    "i've",
+    "if",
+    "in",
+    "into",
+    "is",
+    "isn't",
+    "it",
+    "it's",
+    "its",
+    "itself",
+    "let's",
+    "me",
+    "more",
+    "most",
+    "mustn't",
+    "my",
+    "myself",
+    "no",
+    "nor",
+    "not",
+    "of",
+    "off",
+    "on",
+    "once",
+    "only",
+    "or",
+    "other",
+    "ought",
+    "our",
+    "ours",
+    "ourselves",
+    "out",
+    "over",
+    "own",
+    "same",
+    "shan't",
+    "she",
+    "she'd",
+    "she'll",
+    "she's",
+    "should",
+    "shouldn't",
+    "so",
+    "some",
+    "such",
+    "than",
+    "that",
+    "that's",
+    "the",
+    "their",
+    "theirs",
+    "them",
+    "themselves",
+    "then",
+    "there",
+    "there's",
+    "these",
+    "they",
+    "they'd",
+    "they'll",
+    "they're",
+    "they've",
+    "this",
+    "those",
+    "through",
+    "to",
+    "too",
+    "under",
+    "until",
+    "up",
+    "very",
+    "was",
+    "wasn't",
+    "we",
+    "we'd",
+    "we'll",
+    "we're",
+    "we've",
+    "were",
+    "weren't",
+    "what",
+    "what's",
+    "when",
+    "when's",
+    "where",
+    "where's",
+    "which",
+    "while",
+    "who",
+    "who's",
+    "whom",
+    "why",
+    "why's",
+    "with",
+    "won't",
+    "would",
+    "wouldn't",
+    "you",
+    "you'd",
+    "you'll",
+    "you're",
+    "you've",
+    "your",
+    "yours",
+    "yourself",
+    "yourselves",
 }
 
 
@@ -62,7 +217,11 @@ def extract_claims(text: Optional[str]) -> List[str]:
         return []
     # Split by period, semicolon, exclamation, or question mark followed by space or newline
     raw_sentences = re.split(r"[.;!?\n]+", str(text))
-    claims = [s.strip() for s in raw_sentences if s.strip() and len(tokenize_text(s, remove_stopwords=True)) > 0]
+    claims = [
+        s.strip()
+        for s in raw_sentences
+        if s.strip() and len(tokenize_text(s, remove_stopwords=True)) > 0
+    ]
     return claims
 
 
@@ -90,12 +249,13 @@ def extract_facts(text: Optional[str]) -> List[str]:
 # Standalone Core Metric Calculators
 # =============================================================================
 
+
 def stem_word(w: str) -> str:
     """Lightweight suffix stemmer for robust entity and morphological matching."""
     s = str(w).lower().strip()
     for suffix in ("ing", "ed", "es", "ly", "tion", "ions", "ment", "s"):
         if len(s) > len(suffix) + 2 and s.endswith(suffix):
-            return s[:-len(suffix)]
+            return s[: -len(suffix)]
     return s
 
 
@@ -155,7 +315,8 @@ def calculate_faithfulness(
 
         # Check token containment ratio with morphological matching
         matching_tokens = [
-            t for t in claim_tokens
+            t
+            for t in claim_tokens
             if any(tokens_match(t, ct) for ct in context_tokens) or t in full_context
         ]
         containment = len(matching_tokens) / len(claim_tokens)
@@ -251,7 +412,9 @@ def calculate_context_precision(
     if not contexts:
         return 0.0
 
-    target_ref = ground_truth if (ground_truth is not None and str(ground_truth).strip()) else question
+    target_ref = (
+        ground_truth if (ground_truth is not None and str(ground_truth).strip()) else question
+    )
     if not target_ref or not str(target_ref).strip():
         return 0.0
 
@@ -279,7 +442,7 @@ def calculate_context_precision(
 
         ctx_tokens = set(tokenize_text(ctx_str, remove_stopwords=True))
         overlap = target_tokens.intersection(ctx_tokens)
-        
+
         # Consider relevant if significant keyword overlap
         overlap_ratio = len(overlap) / len(target_tokens) if target_tokens else 0.0
         if overlap_ratio >= 0.40 or len(overlap) >= 2:
@@ -367,8 +530,10 @@ def calculate_context_recall(
 # Metric Wrapper Classes (Compatible with Ragas API)
 # =============================================================================
 
+
 class RagasMetric:
     """Base class for Ragas evaluation metrics."""
+
     name: str
 
     def __call__(self, *args, **kwargs) -> float:
@@ -384,7 +549,9 @@ class Faithfulness(RagasMetric):
     def score(self, question: str, answer: str, contexts: List[str]) -> float:
         return calculate_faithfulness(question=question, answer=answer, contexts=contexts)
 
-    def __call__(self, question: str = "", answer: str = "", contexts: Optional[List[str]] = None, **kwargs) -> float:
+    def __call__(
+        self, question: str = "", answer: str = "", contexts: Optional[List[str]] = None, **kwargs
+    ) -> float:
         return self.score(question=question, answer=answer, contexts=contexts or [])
 
 
@@ -401,10 +568,20 @@ class AnswerRelevancy(RagasMetric):
 class ContextPrecision(RagasMetric):
     name = "context_precision"
 
-    def score(self, question: str, contexts: List[str], ground_truth: Optional[str] = None) -> float:
-        return calculate_context_precision(question=question, contexts=contexts, ground_truth=ground_truth)
+    def score(
+        self, question: str, contexts: List[str], ground_truth: Optional[str] = None
+    ) -> float:
+        return calculate_context_precision(
+            question=question, contexts=contexts, ground_truth=ground_truth
+        )
 
-    def __call__(self, question: str = "", contexts: Optional[List[str]] = None, ground_truth: Optional[str] = None, **kwargs) -> float:
+    def __call__(
+        self,
+        question: str = "",
+        contexts: Optional[List[str]] = None,
+        ground_truth: Optional[str] = None,
+        **kwargs,
+    ) -> float:
         return self.score(question=question, contexts=contexts or [], ground_truth=ground_truth)
 
 
@@ -414,7 +591,9 @@ class ContextRecall(RagasMetric):
     def score(self, ground_truth: str, contexts: List[str]) -> float:
         return calculate_context_recall(ground_truth=ground_truth, contexts=contexts)
 
-    def __call__(self, ground_truth: str = "", contexts: Optional[List[str]] = None, **kwargs) -> float:
+    def __call__(
+        self, ground_truth: str = "", contexts: Optional[List[str]] = None, **kwargs
+    ) -> float:
         return self.score(ground_truth=ground_truth, contexts=contexts or [])
 
 
@@ -439,9 +618,11 @@ VALID_METRIC_MAP: Dict[str, RagasMetric] = {
 # Evaluation Result Container
 # =============================================================================
 
+
 @dataclass
 class RagasEvaluationResult:
     """Evaluation result container with summary scores, per-case records, and DataFrame export."""
+
     summary: Dict[str, float] = field(default_factory=dict)
     details: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -483,6 +664,7 @@ class RagasEvaluationResult:
 # Main Ragas Evaluator
 # =============================================================================
 
+
 class RagasEvaluator:
     """
     Ragas Unstructured Evaluation Suite.
@@ -504,7 +686,12 @@ class RagasEvaluator:
 
         if metrics is None:
             self.metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
-            self.metric_names = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+            self.metric_names = [
+                "faithfulness",
+                "answer_relevancy",
+                "context_precision",
+                "context_recall",
+            ]
         else:
             for m in metrics:
                 if isinstance(m, str):
@@ -603,14 +790,18 @@ class RagasEvaluator:
         # Optional: Try official ragas library if explicitly requested
         if self.use_official_ragas:
             try:
-                from ragas import evaluate as ragas_eval
                 from datasets import Dataset
+                from ragas import evaluate as ragas_eval
 
                 df = pd.DataFrame(records)
                 dataset = Dataset.from_pandas(df)
                 official_score = ragas_eval(dataset=dataset, metrics=self.metrics)
                 res_df = official_score.to_pandas()
-                summary = {col: float(res_df[col].mean()) for col in res_df.columns if col in self.metric_names}
+                summary = {
+                    col: float(res_df[col].mean())
+                    for col in res_df.columns
+                    if col in self.metric_names
+                }
                 details = res_df.to_dict(orient="records")
                 return RagasEvaluationResult(summary=summary, details=details)
             except Exception:
@@ -623,9 +814,19 @@ class RagasEvaluator:
         for record in records:
             # Normalize field names
             q = record.get("question") or record.get("query") or record.get("user_input") or ""
-            ans = record.get("answer") or record.get("response") or record.get("generated_answer") or ""
-            
-            raw_ctx = record.get("contexts") or record.get("context") or record.get("retrieved_contexts") or []
+            ans = (
+                record.get("answer")
+                or record.get("response")
+                or record.get("generated_answer")
+                or ""
+            )
+
+            raw_ctx = (
+                record.get("contexts")
+                or record.get("context")
+                or record.get("retrieved_contexts")
+                or []
+            )
             if isinstance(raw_ctx, str):
                 ctx_list = [raw_ctx]
             elif isinstance(raw_ctx, list):
@@ -633,7 +834,9 @@ class RagasEvaluator:
             else:
                 ctx_list = []
 
-            gt = record.get("ground_truth") or record.get("ground_truths") or record.get("reference")
+            gt = (
+                record.get("ground_truth") or record.get("ground_truths") or record.get("reference")
+            )
             if isinstance(gt, list):
                 gt_str = " ".join(str(g) for g in gt)
             else:
@@ -662,6 +865,8 @@ class RagasEvaluator:
 
         return RagasEvaluationResult(summary=summary, details=details)
 
-    def evaluate(self, dataset: Union[List[Dict[str, Any]], pd.DataFrame, Any]) -> RagasEvaluationResult:
+    def evaluate(
+        self, dataset: Union[List[Dict[str, Any]], pd.DataFrame, Any]
+    ) -> RagasEvaluationResult:
         """Alias for evaluate_test_cases."""
         return self.evaluate_test_cases(dataset)

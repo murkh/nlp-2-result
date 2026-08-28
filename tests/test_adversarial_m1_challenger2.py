@@ -8,22 +8,31 @@ Challenger 2 Verification Suite covering:
 """
 
 import hashlib
-from pathlib import Path
 import shutil
 import tempfile
 import threading
 import time
 import unittest
 import uuid
+from pathlib import Path
 
 from src.database.connection import DatabaseManager
 from src.database.models import Dataset
 from src.ingestion.metadata_extractor import EmbeddingService, MetadataExtractor
-from src.ingestion.structured import StructuredIngestionEngine, sanitize_identifier, sanitize_table_name
+from src.ingestion.structured import (
+    StructuredIngestionEngine,
+    sanitize_identifier,
+    sanitize_table_name,
+)
 from src.ingestion.unstructured import RecursiveCharacterChunker, UnstructuredIngestionEngine
 from src.pruning.schema_pruner import TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, compute_sha256, sanitize_filename
-from tests.conftest import SAMPLE_CSV_TEXT, SAMPLE_CUSTOMERS_CSV_TEXT, SAMPLE_MARKDOWN_TEXT, create_test_fixtures
+from tests.conftest import (
+    SAMPLE_CSV_TEXT,
+    SAMPLE_CUSTOMERS_CSV_TEXT,
+    SAMPLE_MARKDOWN_TEXT,
+    create_test_fixtures,
+)
 
 
 class TestStorageSecurity(unittest.TestCase):
@@ -52,7 +61,10 @@ class TestStorageSecurity(unittest.TestCase):
             ("..", "file_.."),
             ("   ", "col"),
             ("foo/bar/baz.parquet", "baz.parquet"),
-            ("spaces and !@#$%^&*()+={}[]|:;\"'<>,? file.csv", "spaces_and_____________________________file.csv"),
+            (
+                "spaces and !@#$%^&*()+={}[]|:;\"'<>,? file.csv",
+                "spaces_and_____________________________file.csv",
+            ),
             ("unicode_🚀_file.txt", "unicode___file.txt"),
         ]
 
@@ -60,7 +72,9 @@ class TestStorageSecurity(unittest.TestCase):
             sanitized = sanitize_filename(payload)
             self.assertNotIn("/", sanitized, f"Slash found in sanitized filename: {sanitized}")
             self.assertNotIn("\\", sanitized, f"Backslash found in sanitized filename: {sanitized}")
-            self.assertNotIn("\x00", sanitized, f"Null byte found in sanitized filename: {sanitized}")
+            self.assertNotIn(
+                "\x00", sanitized, f"Null byte found in sanitized filename: {sanitized}"
+            )
             self.assertLessEqual(len(sanitized), 255)
 
     def test_get_absolute_path_traversal_prevention(self):
@@ -95,10 +109,15 @@ class TestStorageSecurity(unittest.TestCase):
 
             escaped_target = isolated_root / "escaped_dataset" / "traversal_test.csv"
             # Ensure file did NOT escape outside blob_dir
-            self.assertFalse(escaped_target.exists(), "Security Violation: file escaped outside base_path!")
+            self.assertFalse(
+                escaped_target.exists(), "Security Violation: file escaped outside base_path!"
+            )
             # Ensure file is safely contained inside blob_dir
             safe_target = blob_dir / "escaped_dataset" / "traversal_test.csv"
-            self.assertTrue(safe_target.exists(), "File should be stored in sanitized dataset directory within base_path")
+            self.assertTrue(
+                safe_target.exists(),
+                "File should be stored in sanitized dataset directory within base_path",
+            )
             self.assertEqual(d_id, "escaped_dataset")
         finally:
             shutil.rmtree(isolated_root, ignore_errors=True)
@@ -284,7 +303,7 @@ class TestHybridSearchInjectionAndEdgeCases(unittest.TestCase):
             "' OR 1=1 --",
             "'); DROP TABLE document_chunks; --",
             "' UNION SELECT id, dataset_id, content, 1, 'sec', 'emb', '2024-01-01' FROM document_chunks --",
-            "\" OR \"\"=\"",
+            '" OR ""="',
             "admin' --",
             "1; SELECT pg_sleep(5); --",
             "'; EXEC sp_msforeachtable 'DROP TABLE ?' --",
@@ -306,7 +325,7 @@ class TestHybridSearchInjectionAndEdgeCases(unittest.TestCase):
             "((((((((((unbalanced parentheses",
             "***+++???[]{}|^$\\~`",
             "AND OR NOT NEAR",
-            "\"\"\"\"\"\" quotes galore \"\"\"",
+            '"""""" quotes galore """',
             "\x00null\x00byte\x00query",
             "🚀🔥🎉✨🤖💥🔍",
             "مرحباً بك في نظام البحث الذكي",
@@ -323,9 +342,9 @@ class TestHybridSearchInjectionAndEdgeCases(unittest.TestCase):
     def test_very_long_search_query(self):
         """Verify hybrid search handles massive search queries (10k - 50k characters) without timeout or OOM."""
         long_queries = [
-            "incident response " * 1000,    # ~18,000 chars
-            "deployment canary " * 2500,    # ~45,000 chars
-            "A" * 50000,                     # 50,000 chars contiguous
+            "incident response " * 1000,  # ~18,000 chars
+            "deployment canary " * 2500,  # ~45,000 chars
+            "A" * 50000,  # 50,000 chars contiguous
         ]
 
         for q in long_queries:
@@ -447,12 +466,21 @@ class TestResourceConsumptionAndStress(unittest.TestCase):
         """Verify metadata extractor and structured ingestion on wide (100 cols) and dirty dataset."""
         col_names = [f"col_{i}" for i in range(100)]
         header = ",".join(col_names)
-        
-        row1 = ["1" if i % 4 == 0 else ("3.14" if i % 4 == 1 else ("true" if i % 4 == 2 else "sample text")) for i in range(100)]
+
+        row1 = [
+            (
+                "1"
+                if i % 4 == 0
+                else ("3.14" if i % 4 == 1 else ("true" if i % 4 == 2 else "sample text"))
+            )
+            for i in range(100)
+        ]
         row2 = ["" if i % 5 == 0 else ("NULL" if i % 7 == 0 else str(i * 10)) for i in range(100)]
         row3 = ["NaN" if i % 3 == 0 else str(i) for i in range(100)]
-        
-        csv_content = header + "\n" + ",".join(row1) + "\n" + ",".join(row2) + "\n" + ",".join(row3) + "\n"
+
+        csv_content = (
+            header + "\n" + ",".join(row1) + "\n" + ",".join(row2) + "\n" + ",".join(row3) + "\n"
+        )
 
         dataset = self.structured_engine.ingest_file(
             file_input=csv_content,

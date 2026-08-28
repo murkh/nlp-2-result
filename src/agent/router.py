@@ -17,13 +17,18 @@ from src.database.connection import DatabaseManager, get_db_manager
 
 class SupervisorDecision(BaseModel):
     """Structured decision output from supervisor router."""
-    intent: Literal["GREETING_OR_CHITCHAT", "AMBIGUOUS_QUERY", "STRUCTURED_QUERY", "UNSTRUCTURED_QUERY"]
+
+    intent: Literal[
+        "GREETING_OR_CHITCHAT", "AMBIGUOUS_QUERY", "STRUCTURED_QUERY", "UNSTRUCTURED_QUERY"
+    ]
     confidence: float = Field(default=0.95, ge=0.0, le=1.0, description="Routing confidence score")
     reasoning: str = Field(default="", description="Explanation of routing classification")
     suggested_strategy: Optional[Literal["dedicated_db", "duckdb", "pandas_sandbox"]] = Field(
         default="duckdb", description="Suggested execution strategy for structured queries"
     )
-    relevant_datasets: List[str] = Field(default_factory=list, description="Target dataset names/IDs if identified")
+    relevant_datasets: List[str] = Field(
+        default_factory=list, description="Target dataset names/IDs if identified"
+    )
     clarification_question: Optional[str] = Field(
         default=None, description="Proactive clarification question for ambiguous queries"
     )
@@ -59,23 +64,104 @@ AMBIGUOUS_PATTERNS = [
 ]
 
 UNSTRUCTURED_KEYWORDS = [
-    "policy", "policies", "handbook", "procedure", "procedures", "guideline", "guidelines", "protocol", "protocols",
-    "manual", "manuals", "document", "documents", "documentation", "incident", "incidents", "security", "hr",
-    "vacation", "leave", "remote", "return window", "terms", "contract", "contracts",
-    "faq", "instructions", "sla", "slas", "compliance", "post-mortem", "postmortem",
-    "on-call", "deployment", "code review", "review", "retention", "guide", "guides",
-    "architecture", "runbook", "specification", "sop",
+    "policy",
+    "policies",
+    "handbook",
+    "procedure",
+    "procedures",
+    "guideline",
+    "guidelines",
+    "protocol",
+    "protocols",
+    "manual",
+    "manuals",
+    "document",
+    "documents",
+    "documentation",
+    "incident",
+    "incidents",
+    "security",
+    "hr",
+    "vacation",
+    "leave",
+    "remote",
+    "return window",
+    "terms",
+    "contract",
+    "contracts",
+    "faq",
+    "instructions",
+    "sla",
+    "slas",
+    "compliance",
+    "post-mortem",
+    "postmortem",
+    "on-call",
+    "deployment",
+    "code review",
+    "review",
+    "retention",
+    "guide",
+    "guides",
+    "architecture",
+    "runbook",
+    "specification",
+    "sop",
 ]
 
 STRUCTURED_KEYWORDS = [
-    "how many", "count", "sum", "total", "average", "avg", "min", "max",
-    "highest", "lowest", "top", "bottom", "order", "orders", "revenue",
-    "sales", "amount", "price", "cost", "customer", "customers", "product",
-    "products", "group by", "per", "by city", "by status", "completed",
-    "pending", "cancelled", "shipping", "quantity", "table", "rows",
-    "sql", "dataframe", "pandas", "duckdb", "database", "find orders",
-    "list orders", "filter", "aggregate", "mean", "median", "find", "list",
-    "region", "records", "metrics", "trend", "breakdown",
+    "how many",
+    "count",
+    "sum",
+    "total",
+    "average",
+    "avg",
+    "min",
+    "max",
+    "highest",
+    "lowest",
+    "top",
+    "bottom",
+    "order",
+    "orders",
+    "revenue",
+    "sales",
+    "amount",
+    "price",
+    "cost",
+    "customer",
+    "customers",
+    "product",
+    "products",
+    "group by",
+    "per",
+    "by city",
+    "by status",
+    "completed",
+    "pending",
+    "cancelled",
+    "shipping",
+    "quantity",
+    "table",
+    "rows",
+    "sql",
+    "dataframe",
+    "pandas",
+    "duckdb",
+    "database",
+    "find orders",
+    "list orders",
+    "filter",
+    "aggregate",
+    "mean",
+    "median",
+    "find",
+    "list",
+    "region",
+    "records",
+    "metrics",
+    "trend",
+    "breakdown",
 ]
 
 
@@ -96,6 +182,7 @@ class SupervisorRouter:
         if self.settings.openai_api_key:
             try:
                 from openai import OpenAI
+
                 self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
             except Exception:
                 pass
@@ -179,6 +266,7 @@ class SupervisorRouter:
         if self._openai_client:
             try:
                 import json
+
                 llm_prompt = (
                     f"You are the Supervisor Router for an AI Knowledge Base Q&A platform.\n"
                     f"Classify the following user query into one of: STRUCTURED_QUERY, UNSTRUCTURED_QUERY, AMBIGUOUS_QUERY, GREETING_OR_CHITCHAT.\n"
@@ -192,21 +280,32 @@ class SupervisorRouter:
                     model=self.settings.openai_model,
                     messages=[{"role": "user", "content": llm_prompt}],
                     temperature=0.0,
-                    response_format={"type": "json_object"} if hasattr(self.settings, "openai_model") else None,
+                    response_format=(
+                        {"type": "json_object"} if hasattr(self.settings, "openai_model") else None
+                    ),
                 )
                 raw_json = resp.choices[0].message.content or "{}"
                 data = json.loads(raw_json)
                 intent_val = data.get("intent", "").upper()
-                if intent_val in ("STRUCTURED_QUERY", "UNSTRUCTURED_QUERY", "AMBIGUOUS_QUERY", "GREETING_OR_CHITCHAT"):
+                if intent_val in (
+                    "STRUCTURED_QUERY",
+                    "UNSTRUCTURED_QUERY",
+                    "AMBIGUOUS_QUERY",
+                    "GREETING_OR_CHITCHAT",
+                ):
                     strat = data.get("suggested_strategy")
                     if strat not in ("duckdb", "dedicated_db", "pandas_sandbox"):
                         strat = "duckdb"
                     return SupervisorDecision(
                         intent=intent_val,
                         confidence=float(data.get("confidence", 0.95)),
-                        reasoning=str(data.get("reasoning", f"LLM classified query as {intent_val}")),
+                        reasoning=str(
+                            data.get("reasoning", f"LLM classified query as {intent_val}")
+                        ),
                         suggested_strategy=strat if intent_val == "STRUCTURED_QUERY" else None,
-                        relevant_datasets=dataset_info.get("structured" if intent_val == "STRUCTURED_QUERY" else "unstructured", []),
+                        relevant_datasets=dataset_info.get(
+                            "structured" if intent_val == "STRUCTURED_QUERY" else "unstructured", []
+                        ),
                         clarification_question=data.get("clarification_question"),
                     )
             except Exception:
@@ -216,7 +315,12 @@ class SupervisorRouter:
         suggested_strategy: Literal["dedicated_db", "duckdb", "pandas_sandbox"] = "duckdb"
         if "pandas" in eval_q or "python" in eval_q or "dataframe" in eval_q or "sandbox" in eval_q:
             suggested_strategy = "pandas_sandbox"
-        elif "postgres" in eval_q or "dedicated" in eval_q or "postgresql" in eval_q or "sql table" in eval_q:
+        elif (
+            "postgres" in eval_q
+            or "dedicated" in eval_q
+            or "postgresql" in eval_q
+            or "sql table" in eval_q
+        ):
             suggested_strategy = "dedicated_db"
 
         if unstruct_score > struct_score and unstruct_score > 0:

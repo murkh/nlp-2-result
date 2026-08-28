@@ -104,7 +104,7 @@ class ASTSecurityValidator(ast.NodeVisitor):
 def validate_python_code(code: str) -> Tuple[bool, List[str]]:
     """
     Validate Python code using the ASTSecurityValidator.
-    
+
     Returns:
         Tuple of (is_valid: bool, violations: List[str])
     """

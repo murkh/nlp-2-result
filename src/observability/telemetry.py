@@ -4,11 +4,11 @@ Provides Langfuse integration with child span tracing, token consumption aggrega
 and local in-memory fallback mode for offline, testing, and decoupled execution.
 """
 
-from contextlib import contextmanager
 import os
 import time
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 import uuid
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 from src.config import Settings, get_settings
 
@@ -295,6 +295,7 @@ class ObservabilityManager:
         if self.enabled:
             try:
                 from langfuse import Langfuse
+
                 self.client = Langfuse(
                     public_key=self.public_key,
                     secret_key=self.secret_key,

@@ -10,7 +10,6 @@ import numbers
 import re
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
-
 # =============================================================================
 # Try importing real pandas and numpy
 # =============================================================================
@@ -20,12 +19,14 @@ _HAS_NUMPY = False
 
 try:
     import pandas as pd
+
     _HAS_PANDAS = True
 except ImportError:
     pd = None
 
 try:
     import numpy as np
+
     _HAS_NUMPY = True
 except ImportError:
     np = None
@@ -36,6 +37,7 @@ except ImportError:
 # =============================================================================
 
 if not _HAS_NUMPY:
+
     class _FakeNumpy:
         nan = float("nan")
         number = (int, float, numbers.Number)
@@ -101,8 +103,10 @@ if not _HAS_NUMPY:
 # =============================================================================
 
 if not _HAS_PANDAS:
+
     class Series:
         """Lightweight standard library Series shim."""
+
         def __init__(self, data: Sequence[Any], name: Optional[str] = None):
             self._data = list(data)
             self.name = name
@@ -157,6 +161,7 @@ if not _HAS_PANDAS:
 
                 def lower(self):
                     return Series([str(x).lower() if x is not None else "" for x in self._data])
+
             return _StrAccessor(self._data)
 
         def __len__(self) -> int:
@@ -171,9 +176,9 @@ if not _HAS_PANDAS:
         def __repr__(self) -> str:
             return f"Series({self._data})"
 
-
     class DataFrame:
         """Lightweight standard library DataFrame shim."""
+
         def __init__(
             self,
             data: Any = None,
@@ -345,11 +350,14 @@ if not _HAS_PANDAS:
 
                 def __getitem__(self, idx_list):
                     if isinstance(idx_list, (list, tuple)):
-                        recs = [self._df._records[i] for i in idx_list if i < len(self._df._records)]
+                        recs = [
+                            self._df._records[i] for i in idx_list if i < len(self._df._records)
+                        ]
                         return DataFrame(recs, columns=self._df._columns)
                     elif isinstance(idx_list, int):
                         return self._df._records[idx_list]
                     return self._df
+
             return _LocAccessor(self)
 
         def __len__(self) -> int:
@@ -358,18 +366,24 @@ if not _HAS_PANDAS:
         def __repr__(self) -> str:
             return f"DataFrame(columns={self._columns}, rows={len(self._records)})"
 
-
     class _ApiTypes:
         @staticmethod
         def is_numeric_dtype(series: Any) -> bool:
-            vals = [x for x in (series._data if hasattr(series, "_data") else series) if x is not None]
+            vals = [
+                x for x in (series._data if hasattr(series, "_data") else series) if x is not None
+            ]
             if not vals:
                 return False
-            return all(isinstance(x, (int, float, numbers.Number)) and not isinstance(x, bool) for x in vals)
+            return all(
+                isinstance(x, (int, float, numbers.Number)) and not isinstance(x, bool)
+                for x in vals
+            )
 
         @staticmethod
         def is_bool_dtype(series: Any) -> bool:
-            vals = [x for x in (series._data if hasattr(series, "_data") else series) if x is not None]
+            vals = [
+                x for x in (series._data if hasattr(series, "_data") else series) if x is not None
+            ]
             if not vals:
                 return False
             return all(isinstance(x, bool) for x in vals)
@@ -378,10 +392,8 @@ if not _HAS_PANDAS:
         def is_datetime64_any_dtype(series: Any) -> bool:
             return False
 
-
     class _PandasApi:
         types = _ApiTypes()
-
 
     class _Testing:
         @staticmethod
@@ -404,7 +416,9 @@ if not _HAS_PANDAS:
 
             if check_like:
                 if sorted(cols1) != sorted(cols2):
-                    raise AssertionError(f"DataFrame column names are different: {cols1} vs {cols2}")
+                    raise AssertionError(
+                        f"DataFrame column names are different: {cols1} vs {cols2}"
+                    )
                 cols = sorted(cols1)
             else:
                 if cols1 != cols2:
@@ -423,7 +437,9 @@ if not _HAS_PANDAS:
                     if (v1 is None or pd_isna(v1)) and (v2 is None or pd_isna(v2)):
                         continue
                     if (v1 is None or pd_isna(v1)) or (v2 is None or pd_isna(v2)):
-                        raise AssertionError(f"Values at row {i}, column '{c}' are different: {v1} != {v2}")
+                        raise AssertionError(
+                            f"Values at row {i}, column '{c}' are different: {v1} != {v2}"
+                        )
 
                     # Numeric comparison
                     try:
@@ -435,8 +451,9 @@ if not _HAS_PANDAS:
                             )
                     except (ValueError, TypeError):
                         if str(v1).strip().lower() != str(v2).strip().lower():
-                            raise AssertionError(f"Values at row {i}, column '{c}' are different: {v1} != {v2}")
-
+                            raise AssertionError(
+                                f"Values at row {i}, column '{c}' are different: {v1} != {v2}"
+                            )
 
     def pd_isna(val: Any) -> bool:
         if val is None:
@@ -446,7 +463,6 @@ if not _HAS_PANDAS:
         if str(val).strip().lower() in ("nan", "none", "null", ""):
             return True
         return False
-
 
     def pd_to_numeric(series: Any, errors: str = "coerce") -> Series:
         if isinstance(series, Series):
@@ -469,10 +485,8 @@ if not _HAS_PANDAS:
                 res.append(float("nan"))
         return Series(res, name=getattr(series, "name", None))
 
-
     def pd_to_datetime(series: Any, errors: str = "coerce") -> Series:
         return Series(series if hasattr(series, "__iter__") else [series])
-
 
     class _FakePandas:
         DataFrame = DataFrame

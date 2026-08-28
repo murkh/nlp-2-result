@@ -12,13 +12,12 @@ Computes:
   6. Token cost estimation ($)
 """
 
-from dataclasses import dataclass, field
 import math
 import numbers
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
-from src.evaluation.compat import pd, np, DataFrame, Series
-
+from src.evaluation.compat import DataFrame, Series, np, pd
 
 # Model pricing table per 1M tokens ($ USD)
 MODEL_TOKEN_PRICING: Dict[str, Dict[str, float]] = {
@@ -118,7 +117,11 @@ def normalize_dataframe(df_input: Any) -> pd.DataFrame:
             except (ValueError, TypeError):
                 # Standardize strings
                 def clean_str(val):
-                    if val is None or pd.isna(val) or str(val).strip().lower() in ("none", "null", "nan", ""):
+                    if (
+                        val is None
+                        or pd.isna(val)
+                        or str(val).strip().lower() in ("none", "null", "nan", "")
+                    ):
                         return np.nan
                     return str(val).strip()
 
@@ -165,7 +168,10 @@ def check_execution_equivalence(
 
     # 2. Column schema comparison
     if list(norm_gen.columns) != list(norm_gold.columns):
-        return False, f"Column mismatch: Generated {list(norm_gen.columns)} vs Golden {list(norm_gold.columns)}"
+        return (
+            False,
+            f"Column mismatch: Generated {list(norm_gen.columns)} vs Golden {list(norm_gold.columns)}",
+        )
 
     # 3. Empty DataFrames are equal
     if norm_gen.empty and norm_gold.empty:
@@ -218,7 +224,9 @@ def calculate_syntax_first_pass_rate(
                 success_count += 1
         elif isinstance(a, dict):
             # Check error or status
-            has_error = bool(a.get("error")) or a.get("status") == "FAILED" or a.get("success") is False
+            has_error = (
+                bool(a.get("error")) or a.get("status") == "FAILED" or a.get("success") is False
+            )
             if not has_error:
                 success_count += 1
         else:
@@ -289,9 +297,11 @@ def compute_latency_statistics(latencies_ms: Sequence[float]) -> Dict[str, float
 # Structured Benchmark Evaluation Engine
 # =============================================================================
 
+
 @dataclass
 class StructuredBenchmarkRecord:
     """Detailed result for a single structured evaluation case."""
+
     test_id: str
     query: str
     engine: str
@@ -309,6 +319,7 @@ class StructuredBenchmarkRecord:
 @dataclass
 class StructuredBenchmarkResult:
     """Aggregated outcome of structured benchmark evaluation."""
+
     total_cases: int
     syntax_first_pass_rate: float
     equivalence_rate: float
@@ -419,8 +430,24 @@ class StructuredEquivalenceEvaluator:
 
         for i, tc in enumerate(test_cases):
             query = tc.get("query") or tc.get("question") or f"Test Case #{i+1}"
-            df_gen = tc.get("df_generated") if tc.get("df_generated") is not None else (tc.get("generated_df") if tc.get("generated_df") is not None else tc.get("generated_result"))
-            df_gold = tc.get("df_golden") if tc.get("df_golden") is not None else (tc.get("golden_df") if tc.get("golden_df") is not None else tc.get("golden_result"))
+            df_gen = (
+                tc.get("df_generated")
+                if tc.get("df_generated") is not None
+                else (
+                    tc.get("generated_df")
+                    if tc.get("generated_df") is not None
+                    else tc.get("generated_result")
+                )
+            )
+            df_gold = (
+                tc.get("df_golden")
+                if tc.get("df_golden") is not None
+                else (
+                    tc.get("golden_df")
+                    if tc.get("golden_df") is not None
+                    else tc.get("golden_result")
+                )
+            )
             engine = tc.get("engine") or tc.get("strategy") or "unknown"
             latency = float(tc.get("latency_ms") or tc.get("latency") or 0.0)
             p_tok = int(tc.get("prompt_tokens") or 0)

@@ -9,6 +9,7 @@ Provides a 3-tab interactive web interface:
 import os
 import uuid
 from typing import Any, Dict, List, Optional
+
 import pandas as pd
 import streamlit as st
 
@@ -82,6 +83,7 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # State Initialization
 # -----------------------------------------------------------------------------
 
+
 def init_session_state():
     """Initialize Streamlit session state variables."""
     if "session_id" not in st.session_state:
@@ -104,11 +106,11 @@ client = BackendClient(base_url=st.session_state["backend_url"])
 
 with st.sidebar:
     st.title("🤖 System Control")
-    
+
     # Backend Connectivity
     health_info = client.health()
     is_healthy = health_info.get("status") == "healthy"
-    
+
     if is_healthy:
         st.success(f"🟢 Backend: Connected ({health_info.get('version', '0.1.0')})")
     else:
@@ -122,7 +124,7 @@ with st.sidebar:
     st.subheader("⚙️ Query Settings")
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
     rag_top_k = st.slider("RAG Top-K Chunks", min_value=1, max_value=15, value=5, step=1)
-    
+
     st.divider()
 
     # Session Management
@@ -138,7 +140,7 @@ with st.sidebar:
     datasets = client.list_datasets()
     struct_count = sum(1 for d in datasets if d.get("category") == "structured")
     unstruct_count = sum(1 for d in datasets if d.get("category") == "unstructured")
-    
+
     st.subheader("📊 Catalog Stats")
     st.write(f"• **Structured Tables:** {struct_count}")
     st.write(f"• **Unstructured Docs:** {unstruct_count}")
@@ -148,6 +150,7 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 # Helper Renderers
 # -----------------------------------------------------------------------------
+
 
 def render_intent_badge(intent: str, confidence: float = 1.0, strategy: Optional[str] = None):
     """Render stylized HTML badge for supervisor routing intent."""
@@ -161,7 +164,7 @@ def render_intent_badge(intent: str, confidence: float = 1.0, strategy: Optional
     label = intent.replace("_", " ")
     if strategy:
         label += f" → {strategy}"
-    
+
     st.markdown(
         f'<span class="badge {badge_class}">Intent: {label} ({confidence:.0%})</span>',
         unsafe_allow_html=True,
@@ -204,7 +207,9 @@ def render_model_thinking(thinking_data: Optional[Dict[str, Any]], default_expan
     if not steps and not summary:
         return
 
-    with st.expander(f"🧠 Model Thinking & Decision Choices ({len(steps)} steps)", expanded=default_expanded):
+    with st.expander(
+        f"🧠 Model Thinking & Decision Choices ({len(steps)} steps)", expanded=default_expanded
+    ):
         if summary:
             st.markdown(f"**Decision Summary:** *{summary}*")
             st.divider()
@@ -217,14 +222,26 @@ def render_model_thinking(thinking_data: Optional[Dict[str, Any]], default_expan
             details = step.get("details", {})
 
             # Step title with category icon
-            icon = "🔵" if step_num == 1 else ("🟢" if step_num == 2 else ("🛡️" if "Security" in title or "Guardrail" in title or "Check" in title else ("⚡" if "Execution" in title or "Query" in title else "✨")))
+            icon = (
+                "🔵"
+                if step_num == 1
+                else (
+                    "🟢"
+                    if step_num == 2
+                    else (
+                        "🛡️"
+                        if "Security" in title or "Guardrail" in title or "Check" in title
+                        else ("⚡" if "Execution" in title or "Query" in title else "✨")
+                    )
+                )
+            )
             st.markdown(f"##### {icon} Step {step_num}: {title}")
-            
+
             if choice:
                 st.info(f"**Model Choice:** {choice}")
             if reasoning:
                 st.write(f"**Chain of Thought:** {reasoning}")
-            
+
             # Supplementary details
             if details:
                 if "retained_columns" in details and details["retained_columns"]:
@@ -238,8 +255,10 @@ def render_model_thinking(thinking_data: Optional[Dict[str, Any]], default_expan
                     st.caption("Formulated Code:")
                     st.code(details["code"], language="python")
                 elif "violations" in details and details["violations"]:
-                    st.warning(f"⚠️ Security Violations Detected: {', '.join(details['violations'])}")
-            
+                    st.warning(
+                        f"⚠️ Security Violations Detected: {', '.join(details['violations'])}"
+                    )
+
             st.markdown("---")
 
 
@@ -247,11 +266,13 @@ def render_model_thinking(thinking_data: Optional[Dict[str, Any]], default_expan
 # Main Tabs Layout
 # -----------------------------------------------------------------------------
 
-tab_ingest, tab_qa, tab_benchmark = st.tabs([
-    "📥 Ingestion Hub",
-    "💬 Conversational Q&A",
-    "⚔️ Benchmark Arena",
-])
+tab_ingest, tab_qa, tab_benchmark = st.tabs(
+    [
+        "📥 Ingestion Hub",
+        "💬 Conversational Q&A",
+        "⚔️ Benchmark Arena",
+    ]
+)
 
 
 # =============================================================================
@@ -304,12 +325,29 @@ with tab_ingest:
     with u_col1:
         uploaded_file = st.file_uploader(
             "Upload Dataset File",
-            type=["csv", "tsv", "parquet", "pq", "xlsx", "xls", "pdf", "docx", "doc", "txt", "md", "markdown"],
+            type=[
+                "csv",
+                "tsv",
+                "parquet",
+                "pq",
+                "xlsx",
+                "xls",
+                "pdf",
+                "docx",
+                "doc",
+                "txt",
+                "md",
+                "markdown",
+            ],
             help="Supports CSV, Parquet, Excel, PDF, DOCX, TXT, MD",
         )
     with u_col2:
         disp_name = st.text_input("Display Name (optional)", placeholder="e.g., Q3 Sales Report")
-        desc = st.text_area("Description (optional)", placeholder="e.g., Regional sales transactions for 2023", height=70)
+        desc = st.text_area(
+            "Description (optional)",
+            placeholder="e.g., Regional sales transactions for 2023",
+            height=70,
+        )
 
     if uploaded_file is not None:
         if st.button("🚀 Ingest File", type="primary"):
@@ -334,8 +372,10 @@ with tab_ingest:
 
     # Dataset Catalog Listing
     st.subheader("📚 Ingested Dataset Catalog")
-    cat_filter = st.radio("Filter Category:", ["All", "Structured", "Unstructured"], horizontal=True)
-    
+    cat_filter = st.radio(
+        "Filter Category:", ["All", "Structured", "Unstructured"], horizontal=True
+    )
+
     filtered_datasets = all_datasets
     if cat_filter == "Structured":
         filtered_datasets = struct_ds
@@ -343,22 +383,26 @@ with tab_ingest:
         filtered_datasets = unstruct_ds
 
     if filtered_datasets:
-        cat_df = pd.DataFrame([
-            {
-                "ID": d.get("id", "")[:8] + "...",
-                "Full ID": d.get("id", ""),
-                "Name": d.get("name", ""),
-                "Category": d.get("category", ""),
-                "File Type": d.get("file_type", ""),
-                "Rows / Chunks": d.get("row_count", 0),
-                "Table Name": d.get("table_name", "N/A"),
-                "Created At": str(d.get("created_at", ""))[:19],
-            }
-            for d in filtered_datasets
-        ])
-        
+        cat_df = pd.DataFrame(
+            [
+                {
+                    "ID": d.get("id", "")[:8] + "...",
+                    "Full ID": d.get("id", ""),
+                    "Name": d.get("name", ""),
+                    "Category": d.get("category", ""),
+                    "File Type": d.get("file_type", ""),
+                    "Rows / Chunks": d.get("row_count", 0),
+                    "Table Name": d.get("table_name", "N/A"),
+                    "Created At": str(d.get("created_at", ""))[:19],
+                }
+                for d in filtered_datasets
+            ]
+        )
+
         st.dataframe(
-            cat_df[["ID", "Name", "Category", "File Type", "Rows / Chunks", "Table Name", "Created At"]],
+            cat_df[
+                ["ID", "Name", "Category", "File Type", "Rows / Chunks", "Table Name", "Created At"]
+            ],
             use_container_width=True,
             hide_index=True,
         )
@@ -367,7 +411,7 @@ with tab_ingest:
         st.subheader("🔍 Dataset Inspector")
         ds_options = {f"{d.get('name')} ({d.get('id', '')[:8]})": d for d in filtered_datasets}
         selected_ds_name = st.selectbox("Select Dataset to Inspect:", list(ds_options.keys()))
-        
+
         if selected_ds_name:
             selected_ds = ds_options[selected_ds_name]
             st.json(selected_ds)
@@ -403,13 +447,17 @@ with tab_qa:
             help="Select Auto Router for intent classification or pick a specific execution engine.",
         )
     with ctrl_col2:
-        dataset_choices = {f"{d.get('name')} ({d.get('category')})": d.get("id") for d in all_datasets}
+        dataset_choices = {
+            f"{d.get('name')} ({d.get('category')})": d.get("id") for d in all_datasets
+        }
         selected_ds_labels = st.multiselect(
             "Scope Specific Datasets (Optional):",
             options=list(dataset_choices.keys()),
             help="Restrict query to selected datasets",
         )
-        target_dataset_ids = [dataset_choices[k] for k in selected_ds_labels] if selected_ds_labels else None
+        target_dataset_ids = (
+            [dataset_choices[k] for k in selected_ds_labels] if selected_ds_labels else None
+        )
 
     st.divider()
 
@@ -435,11 +483,17 @@ with tab_qa:
 
                 # Clarification suggestion buttons if ambiguous
                 if msg.get("clarification_message") and msg.get("candidate_datasets"):
-                    st.info(f"💡 Suggestion: Consider querying datasets: {', '.join(msg['candidate_datasets'])}")
+                    st.info(
+                        f"💡 Suggestion: Consider querying datasets: {', '.join(msg['candidate_datasets'])}"
+                    )
 
                 # Expandable Panels
                 if msg.get("generated_code"):
-                    code_lang = "python" if "pandas" in str(msg.get("suggested_strategy", "")).lower() else "sql"
+                    code_lang = (
+                        "python"
+                        if "pandas" in str(msg.get("suggested_strategy", "")).lower()
+                        else "sql"
+                    )
                     with st.expander("💻 Generated Query / Code", expanded=False):
                         st.code(msg["generated_code"], language=code_lang)
 
@@ -456,8 +510,16 @@ with tab_qa:
                         for cit in msg["citations"]:
                             if isinstance(cit, dict):
                                 doc = cit.get("document_name", "Document")
-                                page = f" (Page {cit.get('page_number')})" if cit.get("page_number") else ""
-                                score = f" [Score: {cit.get('similarity_score', 0.0):.2f}]" if cit.get("similarity_score") else ""
+                                page = (
+                                    f" (Page {cit.get('page_number')})"
+                                    if cit.get("page_number")
+                                    else ""
+                                )
+                                score = (
+                                    f" [Score: {cit.get('similarity_score', 0.0):.2f}]"
+                                    if cit.get("similarity_score")
+                                    else ""
+                                )
                                 snippet = cit.get("snippet", "")
                                 st.markdown(f"- **{doc}**{page}{score}: {snippet}")
                             else:
@@ -493,7 +555,9 @@ with tab_qa:
                         temperature=temperature,
                     )
                 elif engine_mode == "Strategy A: Dedicated PostgreSQL DB":
-                    resp = client.query_dedicated_db(user_prompt, dataset_ids=target_dataset_ids, temperature=temperature)
+                    resp = client.query_dedicated_db(
+                        user_prompt, dataset_ids=target_dataset_ids, temperature=temperature
+                    )
                     resp_payload = {
                         "content": resp.get("answer", ""),
                         "generated_code": resp.get("sql_query"),
@@ -505,7 +569,9 @@ with tab_qa:
                         "intent": "STRUCTURED_QUERY",
                     }
                 elif engine_mode == "Strategy B: In-Memory DuckDB":
-                    resp = client.query_duckdb(user_prompt, dataset_ids=target_dataset_ids, temperature=temperature)
+                    resp = client.query_duckdb(
+                        user_prompt, dataset_ids=target_dataset_ids, temperature=temperature
+                    )
                     resp_payload = {
                         "content": resp.get("answer", ""),
                         "generated_code": resp.get("sql_query"),
@@ -517,7 +583,9 @@ with tab_qa:
                         "intent": "STRUCTURED_QUERY",
                     }
                 elif engine_mode == "Strategy C: Sandboxed Python Pandas":
-                    resp = client.query_pandas_sandbox(user_prompt, dataset_ids=target_dataset_ids, temperature=temperature)
+                    resp = client.query_pandas_sandbox(
+                        user_prompt, dataset_ids=target_dataset_ids, temperature=temperature
+                    )
                     resp_payload = {
                         "content": resp.get("answer", ""),
                         "generated_code": resp.get("python_code"),
@@ -547,7 +615,9 @@ with tab_qa:
                 # Construct assistant message record
                 assistant_msg = {
                     "role": "assistant",
-                    "content": resp_payload.get("answer") or resp_payload.get("content") or "No response returned.",
+                    "content": resp_payload.get("answer")
+                    or resp_payload.get("content")
+                    or "No response returned.",
                     "intent": resp_payload.get("intent"),
                     "confidence": resp_payload.get("confidence", 1.0),
                     "routing_reason": resp_payload.get("routing_reason"),
@@ -590,7 +660,7 @@ with tab_benchmark:
     ]
     with b_col2:
         selected_preset = st.selectbox("Preset Query Template:", preset_queries, index=0)
-    
+
     with b_col1:
         default_q = "" if selected_preset == "Custom query..." else selected_preset
         benchmark_query = st.text_area(
@@ -659,12 +729,20 @@ with tab_benchmark:
 
         for col, title, data, lang in strategies:
             with col:
-                st.markdown(f'<div class="benchmark-col-header">{title}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="benchmark-col-header">{title}</div>', unsafe_allow_html=True
+                )
                 status = data.get("status", "UNKNOWN")
                 if status == "SUCCESS":
-                    st.markdown('<span class="badge badge-success">Status: SUCCESS</span>', unsafe_allow_html=True)
+                    st.markdown(
+                        '<span class="badge badge-success">Status: SUCCESS</span>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.markdown('<span class="badge badge-failed">Status: FAILED</span>', unsafe_allow_html=True)
+                    st.markdown(
+                        '<span class="badge badge-failed">Status: FAILED</span>',
+                        unsafe_allow_html=True,
+                    )
                     if data.get("error"):
                         st.caption(f"Error: {data.get('error')}")
 
@@ -673,17 +751,26 @@ with tab_benchmark:
                 tok = data.get("token_usage", {})
                 lat_ms = met.get("total_latency_ms", 0.0)
                 tot_toks = tok.get("total_tokens", 0)
-                
-                chart_data.append({
-                    "Strategy": title.split()[1],
-                    "Latency (ms)": lat_ms,
-                    "Total Tokens": tot_toks,
-                    "Cost ($)": tok.get("estimated_cost_usd", client.calculate_cost(tok.get("prompt_tokens", 0), tok.get("completion_tokens", 0))),
-                })
+
+                chart_data.append(
+                    {
+                        "Strategy": title.split()[1],
+                        "Latency (ms)": lat_ms,
+                        "Total Tokens": tot_toks,
+                        "Cost ($)": tok.get(
+                            "estimated_cost_usd",
+                            client.calculate_cost(
+                                tok.get("prompt_tokens", 0), tok.get("completion_tokens", 0)
+                            ),
+                        ),
+                    }
+                )
 
                 st.write(f"⏱️ **Latency:** {client.format_latency(lat_ms)}")
-                st.write(f"🪙 **Tokens:** {tot_toks} ({tok.get('prompt_tokens', 0)} / {tok.get('completion_tokens', 0)})")
-                
+                st.write(
+                    f"🪙 **Tokens:** {tot_toks} ({tok.get('prompt_tokens', 0)} / {tok.get('completion_tokens', 0)})"
+                )
+
                 # Model Thinking & Choices
                 if data.get("thinking_process"):
                     render_model_thinking(data["thinking_process"], default_expanded=False)
@@ -707,7 +794,7 @@ with tab_benchmark:
         # Comparative Charts Section
         st.divider()
         st.subheader("📈 Comparative Telemetry Breakdown")
-        
+
         if chart_data:
             chart_df = pd.DataFrame(chart_data).set_index("Strategy")
             ch_col1, ch_col2 = st.columns(2)

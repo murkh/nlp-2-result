@@ -141,7 +141,9 @@ class TestSchemaPruner(unittest.TestCase):
 
         self.assertLess(pruned_ctx.token_count_pruned, pruned_ctx.token_count_full)
         self.assertGreaterEqual(pruned_ctx.token_savings_percent, 60.0)
-        print(f"\n[Benchmark 10 Tables] Pruned={pruned_ctx.token_count_pruned} tokens, Full={pruned_ctx.token_count_full} tokens, Savings={pruned_ctx.token_savings_percent}%")
+        print(
+            f"\n[Benchmark 10 Tables] Pruned={pruned_ctx.token_count_pruned} tokens, Full={pruned_ctx.token_count_full} tokens, Savings={pruned_ctx.token_savings_percent}%"
+        )
 
     def test_large_schema_85_percent_token_savings(self):
         """Verify schema pruner achieves >85% token reduction on 25-table enterprise database."""
@@ -164,7 +166,9 @@ class TestSchemaPruner(unittest.TestCase):
         )
 
         self.assertGreaterEqual(pruned_ctx.token_savings_percent, 85.0)
-        print(f"\n[Benchmark 25 Tables] Pruned={pruned_ctx.token_count_pruned} tokens, Full={pruned_ctx.token_count_full} tokens, Savings={pruned_ctx.token_savings_percent}%")
+        print(
+            f"\n[Benchmark 25 Tables] Pruned={pruned_ctx.token_count_pruned} tokens, Full={pruned_ctx.token_count_full} tokens, Savings={pruned_ctx.token_savings_percent}%"
+        )
 
 
 if __name__ == "__main__":

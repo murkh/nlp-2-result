@@ -14,6 +14,7 @@ from src.ingestion.unstructured import UnstructuredIngestionEngine
 
 try:
     from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+
     _has_fastapi = True
 except ImportError:
     _has_fastapi = False
@@ -26,12 +27,14 @@ except ImportError:
             def decorator(func):
                 self.routes.append(("POST", path, func))
                 return func
+
             return decorator
 
         def get(self, path, *args, **kwargs):
             def decorator(func):
                 self.routes.append(("GET", path, func))
                 return func
+
             return decorator
 
 

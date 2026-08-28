@@ -5,11 +5,11 @@ Persists raw uploaded structured (CSV, Parquet, Excel) and unstructured (PDF, DO
 
 import hashlib
 import os
-from pathlib import Path
 import re
 import shutil
-from typing import List, Optional, Tuple, Union
 import uuid
+from pathlib import Path
+from typing import List, Optional, Tuple, Union
 
 from src.config import get_settings
 
@@ -88,20 +88,28 @@ class BlobStorageManager:
         dataset_dir = (self.base_path / d_id).resolve()
         try:
             if not dataset_dir.is_relative_to(resolved_base):
-                raise ValueError(f"Access denied: Path traversal attempt in dataset_id ({dataset_id})")
+                raise ValueError(
+                    f"Access denied: Path traversal attempt in dataset_id ({dataset_id})"
+                )
         except AttributeError:
             if os.path.commonpath([str(dataset_dir), str(resolved_base)]) != str(resolved_base):
-                raise ValueError(f"Access denied: Path traversal attempt in dataset_id ({dataset_id})")
+                raise ValueError(
+                    f"Access denied: Path traversal attempt in dataset_id ({dataset_id})"
+                )
 
         dataset_dir.mkdir(parents=True, exist_ok=True)
 
         target_path = (dataset_dir / safe_name).resolve()
         try:
             if not target_path.is_relative_to(resolved_base):
-                raise ValueError(f"Access denied: Path traversal attempt in target path ({filename})")
+                raise ValueError(
+                    f"Access denied: Path traversal attempt in target path ({filename})"
+                )
         except AttributeError:
             if os.path.commonpath([str(target_path), str(resolved_base)]) != str(resolved_base):
-                raise ValueError(f"Access denied: Path traversal attempt in target path ({filename})")
+                raise ValueError(
+                    f"Access denied: Path traversal attempt in target path ({filename})"
+                )
 
         with open(target_path, "wb") as f:
             f.write(content_bytes)
@@ -117,7 +125,7 @@ class BlobStorageManager:
         try:
             is_rel = full_path.is_relative_to(resolved_base)
         except AttributeError:
-            is_rel = (os.path.commonpath([str(full_path), str(resolved_base)]) == str(resolved_base))
+            is_rel = os.path.commonpath([str(full_path), str(resolved_base)]) == str(resolved_base)
         if not is_rel:
             raise ValueError(f"Access denied: Path traversal attempt detected ({blob_path})")
         return full_path
@@ -155,7 +163,9 @@ class BlobStorageManager:
                 try:
                     is_rel = parent_dir.is_relative_to(resolved_base)
                 except AttributeError:
-                    is_rel = (os.path.commonpath([str(parent_dir), str(resolved_base)]) == str(resolved_base))
+                    is_rel = os.path.commonpath([str(parent_dir), str(resolved_base)]) == str(
+                        resolved_base
+                    )
                 if is_rel and parent_dir != resolved_base and not any(parent_dir.iterdir()):
                     shutil.rmtree(parent_dir, ignore_errors=True)
                 return True

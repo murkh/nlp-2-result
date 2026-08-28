@@ -9,19 +9,19 @@ Verifies:
 """
 
 import unittest
-from src.evaluation.compat import pd, np
 
+from src.evaluation.compat import np, pd
 from src.evaluation.ragas_suite import (
-    RagasEvaluator,
     RagasEvaluationResult,
-    faithfulness,
+    RagasEvaluator,
     answer_relevancy,
-    context_precision,
-    context_recall,
-    calculate_faithfulness,
     calculate_answer_relevancy,
     calculate_context_precision,
     calculate_context_recall,
+    calculate_faithfulness,
+    context_precision,
+    context_recall,
+    faithfulness,
 )
 
 
@@ -38,10 +38,14 @@ class TestRagasSuite(unittest.TestCase):
 
     def test_faithfulness_zero_on_empty_contexts(self):
         """Verify boundary condition: zero contexts returns 0.0 faithfulness."""
-        score = calculate_faithfulness(question="What is DuckDB?", answer="DuckDB is in-memory SQL.", contexts=[])
+        score = calculate_faithfulness(
+            question="What is DuckDB?", answer="DuckDB is in-memory SQL.", contexts=[]
+        )
         self.assertEqual(score, 0.0)
 
-        score_none = calculate_faithfulness(question="What is DuckDB?", answer="DuckDB is in-memory SQL.", contexts=None)
+        score_none = calculate_faithfulness(
+            question="What is DuckDB?", answer="DuckDB is in-memory SQL.", contexts=None
+        )
         self.assertEqual(score_none, 0.0)
 
     def test_faithfulness_zero_on_empty_answer(self):
@@ -54,8 +58,12 @@ class TestRagasSuite(unittest.TestCase):
         """Verify faithfulness drops when answer includes hallucinated or ungrounded facts."""
         context = ["Returns are accepted within 30 days of initial purchase with receipt."]
         question = "What is the return policy?"
-        hallucinated_answer = "Returns are accepted within 30 days. Customers also receive a free $500 gift card."
-        score = calculate_faithfulness(question=question, answer=hallucinated_answer, contexts=context)
+        hallucinated_answer = (
+            "Returns are accepted within 30 days. Customers also receive a free $500 gift card."
+        )
+        score = calculate_faithfulness(
+            question=question, answer=hallucinated_answer, contexts=context
+        )
         self.assertLess(score, 1.0)
         self.assertGreaterEqual(score, 0.0)
 
@@ -90,10 +98,12 @@ class TestRagasSuite(unittest.TestCase):
         contexts = [
             "Relevant context chunk A containing target info.",
             "Irrelevant background noise B.",
-            "Irrelevant background noise C."
+            "Irrelevant background noise C.",
         ]
         gt = "Relevant context chunk A containing target info."
-        score = calculate_context_precision(question="What is chunk A?", contexts=contexts, ground_truth=gt)
+        score = calculate_context_precision(
+            question="What is chunk A?", contexts=contexts, ground_truth=gt
+        )
         self.assertEqual(score, 1.0)
 
     def test_context_precision_lower_when_relevant_chunk_ranked_lower(self):
@@ -102,8 +112,12 @@ class TestRagasSuite(unittest.TestCase):
         contexts_bad = ["Distractor chunk.", "Target chunk info."]
         gt = "Target chunk info."
 
-        score_good = calculate_context_precision(question="Query", contexts=contexts_good, ground_truth=gt)
-        score_bad = calculate_context_precision(question="Query", contexts=contexts_bad, ground_truth=gt)
+        score_good = calculate_context_precision(
+            question="Query", contexts=contexts_good, ground_truth=gt
+        )
+        score_bad = calculate_context_precision(
+            question="Query", contexts=contexts_bad, ground_truth=gt
+        )
 
         self.assertGreater(score_good, score_bad)
 
@@ -121,7 +135,7 @@ class TestRagasSuite(unittest.TestCase):
         """Verify context recall is 1.0 when all ground-truth facts are in contexts."""
         contexts = [
             "Fact A is true and verified. Fact B is also established.",
-            "Supplementary notes."
+            "Supplementary notes.",
         ]
         gt = "Fact A; Fact B"
         score = calculate_context_recall(ground_truth=gt, contexts=contexts)
@@ -156,7 +170,7 @@ class TestRagasSuite(unittest.TestCase):
         result = evaluator.evaluate_single(
             question="What is 512MB RAM?",
             answer="512MB RAM is the sandbox memory limit.",
-            contexts=["Subprocess sandbox has 512MB RAM limit."]
+            contexts=["Subprocess sandbox has 512MB RAM limit."],
         )
         self.assertIn("faithfulness", result)
         self.assertIn("answer_relevancy", result)
@@ -202,7 +216,7 @@ class TestRagasSuite(unittest.TestCase):
         self.assertAlmostEqual(
             result_from_dicts.summary["faithfulness"],
             result_from_df.summary["faithfulness"],
-            places=3
+            places=3,
         )
 
 

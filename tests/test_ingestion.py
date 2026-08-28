@@ -4,16 +4,25 @@ Verifies Blob storage persistence, dedicated table creation, metadata profiling,
 chunking, embeddings, and hybrid RRF search.
 """
 
-from pathlib import Path
 import shutil
 import unittest
+from pathlib import Path
 
 from src.database.connection import DatabaseManager
 from src.ingestion.metadata_extractor import EmbeddingService, MetadataExtractor
-from src.ingestion.structured import StructuredIngestionEngine, sanitize_identifier, sanitize_table_name
+from src.ingestion.structured import (
+    StructuredIngestionEngine,
+    sanitize_identifier,
+    sanitize_table_name,
+)
 from src.ingestion.unstructured import RecursiveCharacterChunker, UnstructuredIngestionEngine
 from src.storage.blob_store import BlobStorageManager
-from tests.conftest import SAMPLE_CSV_TEXT, SAMPLE_CUSTOMERS_CSV_TEXT, SAMPLE_MARKDOWN_TEXT, create_test_fixtures
+from tests.conftest import (
+    SAMPLE_CSV_TEXT,
+    SAMPLE_CUSTOMERS_CSV_TEXT,
+    SAMPLE_MARKDOWN_TEXT,
+    create_test_fixtures,
+)
 
 
 class TestIngestion(unittest.TestCase):
@@ -41,7 +50,9 @@ class TestIngestion(unittest.TestCase):
 
     def test_sanitize_table_name(self):
         """Verify table name format tbl_{prefix}_{name} within 63 characters."""
-        tname = sanitize_table_name("123e4567-e89b-12d3-a456-426614174000", "e_commerce_transactions_2024")
+        tname = sanitize_table_name(
+            "123e4567-e89b-12d3-a456-426614174000", "e_commerce_transactions_2024"
+        )
         self.assertTrue(tname.startswith("tbl_123e4567_"))
         self.assertLessEqual(len(tname), 63)
 
@@ -56,7 +67,9 @@ class TestIngestion(unittest.TestCase):
         self.assertEqual(size_bytes, len(content))
         self.assertEqual(len(hash_str), 64)
         self.assertEqual(self.blob_manager.read_bytes(blob_path), content)
-        self.assertEqual(self.blob_manager.read_text(blob_path), "Sample raw dataset content for testing.")
+        self.assertEqual(
+            self.blob_manager.read_text(blob_path), "Sample raw dataset content for testing."
+        )
 
         # Test path traversal prevention
         with self.assertRaises(ValueError):
@@ -167,7 +180,9 @@ class TestIngestion(unittest.TestCase):
 
         self.assertGreater(len(results), 0)
         top_result = results[0]
-        self.assertTrue("Incident" in top_result["content"] or "post-mortem" in top_result["content"])
+        self.assertTrue(
+            "Incident" in top_result["content"] or "post-mortem" in top_result["content"]
+        )
         self.assertGreater(top_result["rrf_score"], 0.0)
 
 

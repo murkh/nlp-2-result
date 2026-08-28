@@ -5,29 +5,27 @@ renders rich/tabulated summary telemetry, and exports comprehensive JSON evaluat
 """
 
 import argparse
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.evaluation.compat import pd, np, DataFrame, Series
-
+from src.evaluation.compat import DataFrame, Series, np, pd
 from src.evaluation.ragas_suite import (
-    RagasEvaluator,
     RagasEvaluationResult,
-    faithfulness,
+    RagasEvaluator,
     answer_relevancy,
     context_precision,
     context_recall,
+    faithfulness,
 )
 from src.evaluation.structured_equivalence import (
-    StructuredEquivalenceEvaluator,
     StructuredBenchmarkResult,
+    StructuredEquivalenceEvaluator,
     check_execution_equivalence,
     estimate_token_cost,
 )
-
 
 # =============================================================================
 # Built-in Default Benchmark Datasets for Standalone Evaluation
@@ -49,14 +47,18 @@ DEFAULT_STRUCTURED_TEST_CASES = [
         "test_id": "struct_02_duckdb_region_count",
         "query": "Count the number of orders by shipping city in alphabetical order",
         "engine": "duckdb",
-        "df_golden": pd.DataFrame({
-            "shipping_city": ["Austin", "Chicago", "New York", "San Francisco"],
-            "order_count": [1, 1, 2, 1]
-        }),
-        "df_generated": pd.DataFrame({
-            "shipping_city": ["Austin", "Chicago", "New York", "San Francisco"],
-            "order_count": [1, 1, 2, 1]
-        }),
+        "df_golden": pd.DataFrame(
+            {
+                "shipping_city": ["Austin", "Chicago", "New York", "San Francisco"],
+                "order_count": [1, 1, 2, 1],
+            }
+        ),
+        "df_generated": pd.DataFrame(
+            {
+                "shipping_city": ["Austin", "Chicago", "New York", "San Francisco"],
+                "order_count": [1, 1, 2, 1],
+            }
+        ),
         "latency_ms": 14.2,
         "prompt_tokens": 125,
         "completion_tokens": 42,
@@ -88,16 +90,12 @@ DEFAULT_STRUCTURED_TEST_CASES = [
         "test_id": "struct_05_column_permuted_order",
         "query": "List customer id, order status, and total amount for order 101",
         "engine": "dedicated_db",
-        "df_golden": pd.DataFrame({
-            "customer_id": [501],
-            "status": ["completed"],
-            "total_amount": [150.50]
-        }),
-        "df_generated": pd.DataFrame({
-            "total_amount": [150.50],
-            "status": ["completed"],
-            "customer_id": [501]
-        }),
+        "df_golden": pd.DataFrame(
+            {"customer_id": [501], "status": ["completed"], "total_amount": [150.50]}
+        ),
+        "df_generated": pd.DataFrame(
+            {"total_amount": [150.50], "status": ["completed"], "customer_id": [501]}
+        ),
         "latency_ms": 22.1,
         "prompt_tokens": 135,
         "completion_tokens": 30,
@@ -151,6 +149,7 @@ DEFAULT_UNSTRUCTURED_TEST_CASES = [
 # =============================================================================
 # Evaluation Runner Core
 # =============================================================================
+
 
 class EvaluationRunner:
     """
@@ -246,6 +245,7 @@ class EvaluationRunner:
 # Formatted Output Display Helpers
 # =============================================================================
 
+
 def format_evaluation_tables(
     structured_result: Optional[StructuredBenchmarkResult] = None,
     unstructured_result: Optional[RagasEvaluationResult] = None,
@@ -255,22 +255,38 @@ def format_evaluation_tables(
 
     # 1. Structured Results Table
     if structured_result:
-        output_sections.append("================================================================================")
-        output_sections.append("             STRUCTURED EXECUTION EQUIVALENCE BENCHMARK SUMMARY                 ")
-        output_sections.append("================================================================================")
+        output_sections.append(
+            "================================================================================"
+        )
+        output_sections.append(
+            "             STRUCTURED EXECUTION EQUIVALENCE BENCHMARK SUMMARY                 "
+        )
+        output_sections.append(
+            "================================================================================"
+        )
         sum_dict = structured_result.summary_dict()
         output_sections.append(f"Total Test Cases:               {sum_dict['total_cases']}")
-        output_sections.append(f"Syntax First-Pass Rate:         {sum_dict['syntax_first_pass_rate_pct']:.2f}%")
-        output_sections.append(f"Execution Equivalence Rate:     {sum_dict['equivalence_rate_pct']:.2f}%")
-        output_sections.append(f"Mean Latency (ms):              {sum_dict['mean_latency_ms']:.2f} ms")
-        output_sections.append(f"P95 Latency (ms):               {sum_dict['p95_latency_ms']:.2f} ms")
+        output_sections.append(
+            f"Syntax First-Pass Rate:         {sum_dict['syntax_first_pass_rate_pct']:.2f}%"
+        )
+        output_sections.append(
+            f"Execution Equivalence Rate:     {sum_dict['equivalence_rate_pct']:.2f}%"
+        )
+        output_sections.append(
+            f"Mean Latency (ms):              {sum_dict['mean_latency_ms']:.2f} ms"
+        )
+        output_sections.append(
+            f"P95 Latency (ms):               {sum_dict['p95_latency_ms']:.2f} ms"
+        )
         output_sections.append(f"Total Tokens Consumed:          {sum_dict['total_tokens']}")
         output_sections.append(f"Estimated Cost (USD):           ${sum_dict['total_cost_usd']:.6f}")
         output_sections.append("")
 
         if structured_result.per_engine_stats:
             output_sections.append("--- Per-Engine Breakdown ---")
-            output_sections.append(f"{'Engine':<20} | {'Cases':<6} | {'Syntax %':<10} | {'Equiv %':<10} | {'Mean ms':<10} | {'Tokens':<8}")
+            output_sections.append(
+                f"{'Engine':<20} | {'Cases':<6} | {'Syntax %':<10} | {'Equiv %':<10} | {'Mean ms':<10} | {'Tokens':<8}"
+            )
             output_sections.append("-" * 75)
             for eng, stats in structured_result.per_engine_stats.items():
                 output_sections.append(
@@ -284,14 +300,28 @@ def format_evaluation_tables(
 
     # 2. Unstructured Ragas Results Table
     if unstructured_result:
-        output_sections.append("================================================================================")
-        output_sections.append("                  RAGAS UNSTRUCTURED EVALUATION SUMMARY                         ")
-        output_sections.append("================================================================================")
+        output_sections.append(
+            "================================================================================"
+        )
+        output_sections.append(
+            "                  RAGAS UNSTRUCTURED EVALUATION SUMMARY                         "
+        )
+        output_sections.append(
+            "================================================================================"
+        )
         ragas_sum = unstructured_result.summary_dict()
-        output_sections.append(f"Faithfulness:                   {ragas_sum.get('faithfulness', 0.0):.4f}")
-        output_sections.append(f"Answer Relevancy:               {ragas_sum.get('answer_relevancy', 0.0):.4f}")
-        output_sections.append(f"Context Precision:              {ragas_sum.get('context_precision', 0.0):.4f}")
-        output_sections.append(f"Context Recall:                 {ragas_sum.get('context_recall', 0.0):.4f}")
+        output_sections.append(
+            f"Faithfulness:                   {ragas_sum.get('faithfulness', 0.0):.4f}"
+        )
+        output_sections.append(
+            f"Answer Relevancy:               {ragas_sum.get('answer_relevancy', 0.0):.4f}"
+        )
+        output_sections.append(
+            f"Context Precision:              {ragas_sum.get('context_precision', 0.0):.4f}"
+        )
+        output_sections.append(
+            f"Context Recall:                 {ragas_sum.get('context_recall', 0.0):.4f}"
+        )
         output_sections.append("")
 
     return "\n".join(output_sections)
@@ -300,6 +330,7 @@ def format_evaluation_tables(
 # =============================================================================
 # CLI Entrypoint
 # =============================================================================
+
 
 def run_eval_cli(args: Optional[List[str]] = None) -> int:
     """
@@ -363,16 +394,22 @@ def run_eval_cli(args: Optional[List[str]] = None) -> int:
             print(format_evaluation_tables(unstructured_result=unstruct_res))
     else:
         results = runner.run_all(
-            structured_cases=custom_cases.get("structured") if isinstance(custom_cases, dict) else None,
-            unstructured_cases=custom_cases.get("unstructured") if isinstance(custom_cases, dict) else None,
+            structured_cases=(
+                custom_cases.get("structured") if isinstance(custom_cases, dict) else None
+            ),
+            unstructured_cases=(
+                custom_cases.get("unstructured") if isinstance(custom_cases, dict) else None
+            ),
         )
         if parsed.format == "json":
             print(json.dumps(results["summary"], indent=2, default=str))
         else:
-            print(format_evaluation_tables(
-                structured_result=results["structured"],
-                unstructured_result=results["unstructured"],
-            ))
+            print(
+                format_evaluation_tables(
+                    structured_result=results["structured"],
+                    unstructured_result=results["unstructured"],
+                )
+            )
             print(f"Artifacts saved to: {results['artifacts']['summary_path']}")
 
     return 0

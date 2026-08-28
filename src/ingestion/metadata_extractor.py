@@ -4,21 +4,21 @@ Extracts column statistics, sample values, primary/foreign key relationships,
 synthesizes semantic descriptions, and generates 1536-dim vector embeddings.
 """
 
-from dataclasses import dataclass, field
 import hashlib
 import json
 import math
 import os
 import re
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import Settings, get_settings
 from src.database.models import ColumnMetadata, TableMetadata
 
-
 # =============================================================================
 # Embedding Service (Mock, OpenAI, FastEmbed)
 # =============================================================================
+
 
 class EmbeddingService:
     """
@@ -36,6 +36,7 @@ class EmbeddingService:
         if self.provider == "fastembed":
             try:
                 from fastembed import TextEmbedding
+
                 self._fastembed_model = TextEmbedding(model_name=self.settings.embedding_model)
             except Exception:
                 self.provider = "mock"
@@ -43,6 +44,7 @@ class EmbeddingService:
         elif self.provider == "openai" and self.settings.openai_api_key:
             try:
                 from openai import OpenAI
+
                 self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
             except Exception:
                 self.provider = "mock"
@@ -77,7 +79,7 @@ class EmbeddingService:
                     if len(vec) < self.dim:
                         vec = vec + [0.0] * (self.dim - len(vec))
                     else:
-                        vec = vec[:self.dim]
+                        vec = vec[: self.dim]
                     results.append(vec)
                 return results
             except Exception:
@@ -123,9 +125,11 @@ class EmbeddingService:
 # Tabular Data Profiler & Metadata Extractor
 # =============================================================================
 
+
 @dataclass
 class ColumnProfile:
     """Statistical and semantic profile of a single column."""
+
     column_name: str
     data_type: str
     is_primary_key: bool
@@ -141,6 +145,7 @@ class ColumnProfile:
 @dataclass
 class TableProfile:
     """Statistical and semantic profile of a tabular dataset."""
+
     table_name: str
     display_name: str
     description: str
@@ -171,7 +176,9 @@ class MetadataExtractor:
         """
         row_count = len(rows)
         column_count = len(column_names)
-        clean_display_name = display_name or table_name.replace("tbl_", "").replace("_", " ").title()
+        clean_display_name = (
+            display_name or table_name.replace("tbl_", "").replace("_", " ").title()
+        )
 
         col_profiles: List[ColumnProfile] = []
 
@@ -194,9 +201,19 @@ class MetadataExtractor:
 
         # Synthesize table description if not provided
         if not table_description:
-            key_cols = [p.column_name for p in col_profiles if p.is_primary_key or p.is_foreign_key or "name" in p.column_name.lower() or "amount" in p.column_name.lower() or "date" in p.column_name.lower()]
+            key_cols = [
+                p.column_name
+                for p in col_profiles
+                if p.is_primary_key
+                or p.is_foreign_key
+                or "name" in p.column_name.lower()
+                or "amount" in p.column_name.lower()
+                or "date" in p.column_name.lower()
+            ]
             col_summary = ", ".join(key_cols[:6]) if key_cols else ", ".join(column_names[:6])
-            table_description = f"Table {table_name} containing {row_count} records with columns: {col_summary}."
+            table_description = (
+                f"Table {table_name} containing {row_count} records with columns: {col_summary}."
+            )
 
         return TableProfile(
             table_name=table_name,
@@ -215,7 +232,14 @@ class MetadataExtractor:
         lower_name = clean_name.lower()
 
         # Non-null values
-        non_null_values = [v for v in values if v is not None and str(v).strip() != "" and str(v).lower() != "nan" and str(v).lower() != "null"]
+        non_null_values = [
+            v
+            for v in values
+            if v is not None
+            and str(v).strip() != ""
+            and str(v).lower() != "nan"
+            and str(v).lower() != "null"
+        ]
         null_count = total_rows - len(non_null_values)
         null_percentage = round((null_count / total_rows * 100.0), 2) if total_rows > 0 else 0.0
 
@@ -253,12 +277,20 @@ class MetadataExtractor:
                 foreign_col = "id"
 
         # Unique constraint heuristic
-        if not is_pk and not is_fk and null_count == 0 and total_rows > 1 and distinct_count == total_rows:
+        if (
+            not is_pk
+            and not is_fk
+            and null_count == 0
+            and total_rows > 1
+            and distinct_count == total_rows
+        ):
             if "id" in lower_name or "code" in lower_name or "key" in lower_name:
                 is_pk = True
 
         # Generate semantic description
-        description = self._generate_column_description(clean_name, data_type, is_pk, is_fk, foreign_table, sample_values)
+        description = self._generate_column_description(
+            clean_name, data_type, is_pk, is_fk, foreign_table, sample_values
+        )
 
         return ColumnProfile(
             column_name=clean_name,
@@ -279,8 +311,15 @@ class MetadataExtractor:
             return "TEXT"
 
         # Check boolean
-        if all(isinstance(v, bool) or str(v).lower() in ("true", "false", "t", "f", "1", "0") for v in values[:50]):
-            if col_name.startswith("is_") or col_name.startswith("has_") or all(isinstance(v, bool) for v in values[:10]):
+        if all(
+            isinstance(v, bool) or str(v).lower() in ("true", "false", "t", "f", "1", "0")
+            for v in values[:50]
+        ):
+            if (
+                col_name.startswith("is_")
+                or col_name.startswith("has_")
+                or all(isinstance(v, bool) for v in values[:10])
+            ):
                 return "BOOLEAN"
 
         # Check integer
@@ -308,7 +347,12 @@ class MetadataExtractor:
             return "DOUBLE PRECISION"
 
         # Check datetime / date
-        if "date" in col_name or "time" in col_name or "created" in col_name or "updated" in col_name:
+        if (
+            "date" in col_name
+            or "time" in col_name
+            or "created" in col_name
+            or "updated" in col_name
+        ):
             sample_str = str(values[0]).strip()
             if re.match(r"^\d{4}-\d{2}-\d{2}(T|\s)\d{2}:\d{2}", sample_str):
                 return "TIMESTAMPTZ"

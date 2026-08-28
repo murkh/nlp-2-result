@@ -3,11 +3,11 @@ Database models and schemas for Multi-Agent Knowledge Base Q&A Platform.
 Provides clean dataclass structures with serialization support.
 """
 
+import json
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-import json
 from typing import Any, Dict, List, Optional
-import uuid
 
 
 def generate_uuid() -> str:
@@ -23,6 +23,7 @@ def current_utc_time() -> datetime:
 @dataclass
 class Dataset:
     """Metadata record for an uploaded structured or unstructured dataset."""
+
     name: str
     file_type: str
     category: str
@@ -47,6 +48,7 @@ class Dataset:
 @dataclass
 class TableMetadata:
     """Metadata record for a dedicated structured table (used in Stage 1 pruning)."""
+
     dataset_id: str
     table_name: str
     display_name: str
@@ -67,6 +69,7 @@ class TableMetadata:
 @dataclass
 class ColumnMetadata:
     """Metadata record for a column in a structured table (used in Stage 2 pruning)."""
+
     table_id: str
     column_name: str
     data_type: str
@@ -93,6 +96,7 @@ class ColumnMetadata:
 @dataclass
 class DocumentChunk:
     """Text chunk record from unstructured documents with vector embeddings."""
+
     dataset_id: str
     chunk_index: int
     content: str
@@ -114,6 +118,7 @@ class DocumentChunk:
 @dataclass
 class QueryLog:
     """Telemetry log record for user queries and execution metrics."""
+
     query_text: str
     engine: str
     status: str

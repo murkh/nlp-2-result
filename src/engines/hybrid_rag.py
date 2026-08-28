@@ -43,6 +43,7 @@ class HybridRAGEngine:
         if self.settings.openai_api_key:
             try:
                 from openai import OpenAI
+
                 self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
             except Exception:
                 self._openai_client = None
@@ -63,7 +64,11 @@ class HybridRAGEngine:
         start_time = time.perf_counter()
         query_text = request.query
         top_k = request.top_k or 5
-        target_dataset_id = request.dataset_ids[0] if (request.dataset_ids and len(request.dataset_ids) == 1) else None
+        target_dataset_id = (
+            request.dataset_ids[0]
+            if (request.dataset_ids and len(request.dataset_ids) == 1)
+            else None
+        )
 
         # 1. Embed query & Retrieve chunks via RRF
         retrieval_start = time.perf_counter()
@@ -84,7 +89,9 @@ class HybridRAGEngine:
                 answer=ans,
                 citations=[],
                 retrieved_chunks_count=0,
-                metrics=ExecutionMetrics(engine_execution_ms=engine_latency_ms, total_latency_ms=total_lat),
+                metrics=ExecutionMetrics(
+                    engine_execution_ms=engine_latency_ms, total_latency_ms=total_lat
+                ),
                 token_usage=TokenUsage(prompt_tokens=20, completion_tokens=15),
             )
 
@@ -122,7 +129,9 @@ class HybridRAGEngine:
 
         # 3. Synthesize grounded answer with dynamic LLM thought
         synth_start = time.perf_counter()
-        answer, llm_thought, synth_tokens = self._synthesize_grounded_answer(query_text, full_context, citations, raw_chunks)
+        answer, llm_thought, synth_tokens = self._synthesize_grounded_answer(
+            query_text, full_context, citations, raw_chunks
+        )
         synth_latency_ms = (time.perf_counter() - synth_start) * 1000.0
 
         total_lat = (time.perf_counter() - start_time) * 1000.0
@@ -155,7 +164,10 @@ class HybridRAGEngine:
         # Construct Thinking Process with dynamic LLM thoughts
         top_docs = list({c.document_name for c in citations})
         top_docs_str = ", ".join(top_docs) if top_docs else "None"
-        synth_reason = llm_thought or f"Extracted {len(citations)} relevant excerpt(s) from [{top_docs_str}] and grounded response strictly in verified citations."
+        synth_reason = (
+            llm_thought
+            or f"Extracted {len(citations)} relevant excerpt(s) from [{top_docs_str}] and grounded response strictly in verified citations."
+        )
 
         thinking = ThinkingProcess(
             summary=f"Unstructured Hybrid RAG executed Dense Vector + Sparse BM25 retrieval over document(s) [{top_docs_str}], fusing {len(citations)} top chunk(s) via RRF.",
@@ -223,7 +235,7 @@ class HybridRAGEngine:
                     temperature=0.0,
                 )
                 raw_text = resp.choices[0].message.content or ""
-                
+
                 thought = None
                 ans = raw_text
                 blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
@@ -233,7 +245,9 @@ class HybridRAGEngine:
                         thought = content.strip()
                         ans = raw_text.replace(f"```{lang}\n{content}```", "").strip()
 
-                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                comp_tokens = (
+                    resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                )
                 return ans.strip(), thought, (prompt_tokens, comp_tokens)
             except Exception:
                 pass
@@ -277,7 +291,11 @@ class HybridRAGEngine:
 
         if not best_sentence or best_score <= 0:
             content = raw_chunks[0].get("content", "")
-            clean_lines = [l.strip() for l in content.split("\n") if l.strip() and not l.strip().startswith("#")]
+            clean_lines = [
+                l.strip()
+                for l in content.split("\n")
+                if l.strip() and not l.strip().startswith("#")
+            ]
             best_sentence = clean_lines[0] if clean_lines else content[:150]
             best_cite = citations[0]
 

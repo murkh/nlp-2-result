@@ -4,8 +4,8 @@ Verifies view registration, analytical query execution, LIMIT 20 enforcement,
 and security PRAGMA validation.
 """
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from src.api.schemas import QueryDuckDBRequest
 from tests.conftest import create_test_fixtures
@@ -38,6 +38,7 @@ class TestDuckDBQueryEngine(unittest.TestCase):
         )
 
         from src.engines.duckdb_engine import DuckDBQueryEngine
+
         self.settings = fixtures.get("settings")
         self.engine = DuckDBQueryEngine(
             db_manager=self.db_manager,
@@ -47,6 +48,7 @@ class TestDuckDBQueryEngine(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_duckdb_count_query(self):
@@ -82,6 +84,7 @@ class TestDuckDBQueryEngine(unittest.TestCase):
     def test_duckdb_security_rejection(self):
         """Verify DuckDB rejects administrative and destructive SQL statements."""
         from src.engines.duckdb_engine import validate_duckdb_security
+
         self.assertFalse(validate_duckdb_security("ATTACH '/etc/passwd' AS shadow;")[0])
         self.assertFalse(validate_duckdb_security("COPY tbl_orders TO '/tmp/leak.csv';")[0])
         self.assertFalse(validate_duckdb_security("EXPORT DATABASE '/tmp/db';")[0])

@@ -6,9 +6,9 @@ computes head-to-head performance telemetry, and synthesizes comparative trade-o
 """
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import math
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.api.schemas import (
@@ -275,7 +275,11 @@ class BenchmarkArenaEngine:
         strat_c: StrategyBenchmarkResult,
     ) -> str:
         """Construct concise comparative synthesis of the three execution strategies."""
-        consensus_text = "All successful strategies reached 100% mathematical result consensus." if consensus else "Discrepancy detected across engine outputs."
+        consensus_text = (
+            "All successful strategies reached 100% mathematical result consensus."
+            if consensus
+            else "Discrepancy detected across engine outputs."
+        )
         summary = (
             f"Benchmark Arena Analysis: {fastest} achieved the lowest total execution latency "
             f"({min(strat_a.metrics.total_latency_ms, strat_b.metrics.total_latency_ms, strat_c.metrics.total_latency_ms):.1f}ms), "

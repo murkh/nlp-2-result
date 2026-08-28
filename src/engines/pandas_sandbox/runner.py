@@ -13,7 +13,6 @@ import tempfile
 import time
 from typing import Any, Dict, Optional, Tuple
 
-
 WRAPPER_TEMPLATE = """
 import sys
 import json

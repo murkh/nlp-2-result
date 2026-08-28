@@ -11,11 +11,11 @@ Verifies:
 """
 
 import unittest
-from src.evaluation.compat import pd, np
 
+from src.evaluation.compat import np, pd
 from src.evaluation.structured_equivalence import (
-    StructuredEquivalenceEvaluator,
     StructuredBenchmarkResult,
+    StructuredEquivalenceEvaluator,
     assert_frame_equivalence,
     calculate_equivalence_rate,
     calculate_syntax_first_pass_rate,
@@ -31,11 +31,13 @@ class TestStructuredEquivalence(unittest.TestCase):
 
     def test_normalize_dataframe_column_casing_and_order(self):
         """Verify column names are stripped, lowercased, and sorted alphabetically."""
-        df = pd.DataFrame({
-            " Total_Amount ": [100.5, 200.0],
-            "Customer_ID": [501, 502],
-            " STATUS ": [" completed ", "shipped "]
-        })
+        df = pd.DataFrame(
+            {
+                " Total_Amount ": [100.5, 200.0],
+                "Customer_ID": [501, 502],
+                " STATUS ": [" completed ", "shipped "],
+            }
+        )
         norm = normalize_dataframe(df)
         expected_cols = ["customer_id", "status", "total_amount"]
         self.assertEqual(list(norm.columns), expected_cols)
@@ -43,9 +45,7 @@ class TestStructuredEquivalence(unittest.TestCase):
 
     def test_normalize_dataframe_float_rounding(self):
         """Verify float numbers are rounded to 4 decimal places."""
-        df = pd.DataFrame({
-            "val": [3.14159265, 2.71828182, 1.0]
-        })
+        df = pd.DataFrame({"val": [3.14159265, 2.71828182, 1.0]})
         norm = normalize_dataframe(df)
         # Note: row sorting orders rows ascending across columns
         self.assertEqual(norm["val"].tolist(), [1.0, 2.7183, 3.1416])
@@ -160,7 +160,9 @@ class TestStructuredEquivalence(unittest.TestCase):
 
     def test_token_cost_estimation(self):
         """Verify token cost calculation across models."""
-        cost_mini = estimate_token_cost(prompt_tokens=1000, completion_tokens=500, model="gpt-4o-mini")
+        cost_mini = estimate_token_cost(
+            prompt_tokens=1000, completion_tokens=500, model="gpt-4o-mini"
+        )
         self.assertGreater(cost_mini, 0.0)
 
         cost_4o = estimate_token_cost(prompt_tokens=1000, completion_tokens=500, model="gpt-4o")

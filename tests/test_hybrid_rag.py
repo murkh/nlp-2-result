@@ -4,9 +4,9 @@ Verifies Reciprocal Rank Fusion (RRF k=60), bracketed source citation formatting
 and grounded response synthesis.
 """
 
-from pathlib import Path
 import re
 import unittest
+from pathlib import Path
 
 from src.api.schemas import QueryUnstructuredRAGRequest
 from src.engines.hybrid_rag import HybridRAGEngine
@@ -51,6 +51,7 @@ class TestHybridRAGEngine(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_hybrid_rag_query_with_citations(self):
@@ -93,7 +94,9 @@ class TestHybridRAGEngine(unittest.TestCase):
     def test_unstructured_rag_empty_result_handling(self):
         """Verify response when query has no matching documents or empty database."""
         empty_db = create_test_fixtures()["test_db"]
-        empty_engine = HybridRAGEngine(db_manager=empty_db, embedding_service=self.embedding_service)
+        empty_engine = HybridRAGEngine(
+            db_manager=empty_db, embedding_service=self.embedding_service
+        )
 
         req = QueryUnstructuredRAGRequest(query="What is the refund policy?")
         resp = empty_engine.execute_query(req)

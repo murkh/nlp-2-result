@@ -1,4 +1,5 @@
 """Ingestion and metadata extraction pipelines."""
+
 from src.ingestion.metadata_extractor import (
     ColumnProfile,
     EmbeddingService,

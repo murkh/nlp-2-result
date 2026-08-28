@@ -65,7 +65,9 @@ class TestASTSecurityAdversarial(unittest.TestCase):
             code = f"import {mod}"
             valid, errs = validate_python_code(code)
             self.assertFalse(valid, f"Expected rejection for: {code}")
-            self.assertTrue(any("Forbidden module" in e for e in errs), f"Unexpected err msg for {mod}: {errs}")
+            self.assertTrue(
+                any("Forbidden module" in e for e in errs), f"Unexpected err msg for {mod}: {errs}"
+            )
 
     def test_ast_blocks_from_imports_and_submodules(self):
         """Verify from-import and nested submodule import variations are rejected."""
@@ -162,7 +164,9 @@ class TestASTSecurityAdversarial(unittest.TestCase):
             code = f"x = {dunder}"
             valid, errs = validate_python_code(code)
             self.assertFalse(valid, f"Expected rejection for dunder: {dunder}")
-            self.assertTrue(any("Forbidden dunder" in e for e in errs), f"Errors for {dunder}: {errs}")
+            self.assertTrue(
+                any("Forbidden dunder" in e for e in errs), f"Errors for {dunder}: {errs}"
+            )
 
     # -------------------------------------------------------------------------
     # 3. Empirical Demonstration of AST Bypass Vulnerabilities
@@ -176,7 +180,10 @@ class TestASTSecurityAdversarial(unittest.TestCase):
         exploit_eval = "f = eval\nresult = f('10 * 10')"
         # 1. AST Validation test (Bypasses AST check)
         valid, errs = validate_python_code(exploit_eval)
-        self.assertTrue(valid, "Vulnerability confirmed: AST validator permits 'f = eval' assignment without error")
+        self.assertTrue(
+            valid,
+            "Vulnerability confirmed: AST validator permits 'f = eval' assignment without error",
+        )
         self.assertEqual(len(errs), 0)
 
         # 2. Execution test (Runs successfully in sandbox)
@@ -203,7 +210,9 @@ class TestASTSecurityAdversarial(unittest.TestCase):
         """
         walrus_eval = "result = (f := eval)('50 + 50')"
         valid, errs = validate_python_code(walrus_eval)
-        self.assertTrue(valid, "Vulnerability confirmed: Walrus operator (NamedExpr) bypasses visit_Call")
+        self.assertTrue(
+            valid, "Vulnerability confirmed: Walrus operator (NamedExpr) bypasses visit_Call"
+        )
 
         ok, res, err, rc = execute_sandboxed_code(walrus_eval)
         self.assertTrue(ok)
@@ -222,7 +231,9 @@ class TestASTSecurityAdversarial(unittest.TestCase):
             "result = {'subclasses_count': len(subs)}"
         )
         valid, errs = validate_python_code(exploit_getattribute)
-        self.assertTrue(valid, "Vulnerability confirmed: object.__getattribute__ bypasses AST validator")
+        self.assertTrue(
+            valid, "Vulnerability confirmed: object.__getattribute__ bypasses AST validator"
+        )
 
         ok, res, err, rc = execute_sandboxed_code(exploit_getattribute)
         self.assertTrue(ok)
@@ -241,7 +252,9 @@ class TestSubprocessWatchdogAdversarial(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(rc, 124)
         self.assertTrue("timed out" in err.lower())
-        self.assertLess(elapsed, 2.0, "Watchdog failed to terminate process within reasonable buffer")
+        self.assertLess(
+            elapsed, 2.0, "Watchdog failed to terminate process within reasonable buffer"
+        )
 
     def test_watchdog_terminates_large_iteration_loop(self):
         """Verify watchdog terminates huge range loop."""
@@ -272,7 +285,9 @@ class TestSubprocessWatchdogAdversarial(unittest.TestCase):
         probe_code = "im = __import__\nos_mod = im('os')\nresult = {'has_secret': 'SECRET_API_TOKEN_XYZ' in os_mod.environ}"
         ok, res, err, rc = execute_sandboxed_code(probe_code, timeout_seconds=2.0)
         self.assertTrue(ok)
-        self.assertFalse(res["data"]["has_secret"], "Security violation: Sensitive env var leaked into sandbox!")
+        self.assertFalse(
+            res["data"]["has_secret"], "Security violation: Sensitive env var leaked into sandbox!"
+        )
 
 
 class TestBenchmarkArenaAdversarial(unittest.TestCase):
@@ -308,6 +323,7 @@ class TestBenchmarkArenaAdversarial(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     # -------------------------------------------------------------------------
@@ -365,7 +381,9 @@ class TestBenchmarkArenaAdversarial(unittest.TestCase):
     def test_tabular_equivalence_row_count_mismatch(self):
         """Verify row count mismatch immediately fails equivalence."""
         res_a = TabularResult(columns=["status"], rows=[{"status": "completed"}], row_count=1)
-        res_b = TabularResult(columns=["status"], rows=[{"status": "completed"}, {"status": "pending"}], row_count=2)
+        res_b = TabularResult(
+            columns=["status"], rows=[{"status": "completed"}, {"status": "pending"}], row_count=2
+        )
         self.assertFalse(compare_tabular_results(res_a, res_b))
 
     def test_tabular_equivalence_empty_tables(self):

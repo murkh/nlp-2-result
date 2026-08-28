@@ -8,8 +8,8 @@ Defines the multi-agent graph with supervisor routing across 4 intent branches:
 """
 
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple
 import uuid
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.agent.nodes.chitchat_node import chitchat_node
 from src.agent.nodes.clarify_node import clarify_node
@@ -21,6 +21,7 @@ from src.agent.state import AgentState
 
 try:
     from langgraph.graph import END, StateGraph
+
     _has_langgraph = True
 except ImportError:
     _has_langgraph = False

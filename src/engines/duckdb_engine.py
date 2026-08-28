@@ -7,10 +7,10 @@ enforces LIMIT 20 guardrails, and synthesizes natural language answers.
 
 import csv
 import os
-from pathlib import Path
 import re
 import sqlite3
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.api.schemas import (
@@ -27,7 +27,6 @@ from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import QueryLog
 from src.pruning.schema_pruner import PrunedSchemaContext, TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
-
 
 FORBIDDEN_DUCKDB_PATTERNS = [
     r"\b(ATTACH|DETACH|LOAD|INSTALL|EXPORT\s+DATABASE|COPY\s+.*?TO)\b",
@@ -92,6 +91,7 @@ class DuckDBQueryEngine:
         if self.settings.openai_api_key:
             try:
                 from openai import OpenAI
+
                 self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
             except Exception:
                 self._openai_client = None
@@ -134,8 +134,12 @@ class DuckDBQueryEngine:
                 answer=f"Execution blocked: {sec_err}",
                 sql_query=sql_query,
                 tabular_result=TabularResult(columns=[], rows=[], row_count=0),
-                metrics=ExecutionMetrics(query_generation_ms=gen_latency_ms, total_latency_ms=total_lat),
-                token_usage=TokenUsage(prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]),
+                metrics=ExecutionMetrics(
+                    query_generation_ms=gen_latency_ms, total_latency_ms=total_lat
+                ),
+                token_usage=TokenUsage(
+                    prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]
+                ),
                 error=sec_err,
             )
 
@@ -158,7 +162,9 @@ class DuckDBQueryEngine:
                     engine_execution_ms=exec_latency_ms,
                     total_latency_ms=total_lat,
                 ),
-                token_usage=TokenUsage(prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]),
+                token_usage=TokenUsage(
+                    prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]
+                ),
                 error=exec_err,
             )
 
@@ -206,9 +212,18 @@ class DuckDBQueryEngine:
         )
 
         # Construct Thinking Process with dynamic LLM thoughts
-        selected_tbls = ", ".join(pruned_context.table_names) if pruned_context.table_names else "None"
-        file_summary = ", ".join(f"{t} ({Path(p).name})" for t, p in pruned_context.file_paths.items()) if pruned_context.file_paths else selected_tbls
-        sql_reason = llm_thought or f"Formulated vectorized DuckDB SQL for '{query_text}' scanning view(s) [{selected_tbls}]."
+        selected_tbls = (
+            ", ".join(pruned_context.table_names) if pruned_context.table_names else "None"
+        )
+        file_summary = (
+            ", ".join(f"{t} ({Path(p).name})" for t, p in pruned_context.file_paths.items())
+            if pruned_context.file_paths
+            else selected_tbls
+        )
+        sql_reason = (
+            llm_thought
+            or f"Formulated vectorized DuckDB SQL for '{query_text}' scanning view(s) [{selected_tbls}]."
+        )
 
         thinking = ThinkingProcess(
             summary=f"Strategy B executed vectorized in-memory DuckDB query over blob storage file(s) [{selected_tbls}] and returned {len(dict_rows)} row(s).",
@@ -274,16 +289,21 @@ class DuckDBQueryEngine:
                     continue
                 ext = Path(blob_path).suffix.lower()
                 if ext in (".parquet", ".pq"):
-                    con.execute(f'CREATE VIEW "{table_name}" AS SELECT * FROM read_parquet(\'{blob_path}\');')
+                    con.execute(
+                        f"CREATE VIEW \"{table_name}\" AS SELECT * FROM read_parquet('{blob_path}');"
+                    )
                 elif ext in (".xlsx", ".xls"):
                     try:
                         import pandas as pd
+
                         df_excel = pd.read_excel(blob_path)
                         con.register(table_name, df_excel)
                     except Exception:
                         pass
                 else:
-                    con.execute(f'CREATE VIEW "{table_name}" AS SELECT * FROM read_csv(\'{blob_path}\', auto_detect=true);')
+                    con.execute(
+                        f"CREATE VIEW \"{table_name}\" AS SELECT * FROM read_csv('{blob_path}', auto_detect=true);"
+                    )
 
             rel = con.execute(sql_query)
             cols = [desc[0] for desc in rel.description] if rel.description else []
@@ -319,7 +339,7 @@ class DuckDBQueryEngine:
                     cur.execute(f'CREATE TABLE "{table_name}" ({col_defs});')
 
                     placeholders = ", ".join(["?"] * len(clean_cols))
-                    rows = [row[:len(clean_cols)] for row in reader if row]
+                    rows = [row[: len(clean_cols)] for row in reader if row]
                     if rows:
                         cur.executemany(f'INSERT INTO "{table_name}" VALUES ({placeholders})', rows)
             conn.commit()
@@ -336,7 +356,9 @@ class DuckDBQueryEngine:
             except Exception as inner_e:
                 return [], [], f"{str(e)} (fallback: {str(inner_e)})"
 
-    def _generate_sql(self, query: str, context: PrunedSchemaContext) -> Tuple[str, Optional[str], Tuple[int, int]]:
+    def _generate_sql(
+        self, query: str, context: PrunedSchemaContext
+    ) -> Tuple[str, Optional[str], Tuple[int, int]]:
         """Generate DuckDB SQL query using LLM or rule-based generator."""
         prompt = (
             f"You are an expert DuckDB analytical engineer. Write a high-performance DuckDB SQL query.\n"
@@ -357,7 +379,7 @@ class DuckDBQueryEngine:
                     temperature=0.0,
                 )
                 raw_text = resp.choices[0].message.content or ""
-                
+
                 thought = None
                 sql = None
                 blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
@@ -372,7 +394,9 @@ class DuckDBQueryEngine:
                     sql_match = re.search(r"```(?:sql)?(.*?)```", raw_text, re.DOTALL)
                     sql = sql_match.group(1).strip() if sql_match else raw_text.strip()
 
-                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                comp_tokens = (
+                    resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                )
                 return sql, thought, (prompt_tokens, comp_tokens)
             except Exception:
                 pass
@@ -400,9 +424,21 @@ class DuckDBQueryEngine:
             return f'SELECT COUNT(*) AS total_records FROM "{primary_table}";'
 
         # Check sum / avg query
-        amount_col = next((c for c in retained_cols if "amount" in c.lower() or "price" in c.lower() or "total" in c.lower() or "sales" in c.lower()), None)
+        amount_col = next(
+            (
+                c
+                for c in retained_cols
+                if "amount" in c.lower()
+                or "price" in c.lower()
+                or "total" in c.lower()
+                or "sales" in c.lower()
+            ),
+            None,
+        )
         if ("sum" in lower_q or "total sales" in lower_q or "revenue" in lower_q) and amount_col:
-            city_col = next((c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None)
+            city_col = next(
+                (c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None
+            )
             if city_col and ("by city" in lower_q or "per city" in lower_q or "top" in lower_q):
                 return f'SELECT "{city_col}", SUM(CAST("{amount_col}" AS DOUBLE)) AS total_revenue FROM "{primary_table}" GROUP BY "{city_col}" ORDER BY total_revenue DESC LIMIT 20;'
             return f'SELECT SUM(CAST("{amount_col}" AS DOUBLE)) AS total_revenue FROM "{primary_table}";'

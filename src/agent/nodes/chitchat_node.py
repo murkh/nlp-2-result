@@ -21,7 +21,10 @@ def chitchat_node(state: AgentState) -> Dict[str, Any]:
     with tracer.start_trace(name="chitchat_node", session_id=session_id) as trace:
         span = trace.start_span("generate_chitchat_reply", input_data={"query": query})
 
-        if any(w in query for w in ["who are you", "what are you", "what can you do", "capabilities", "help"]):
+        if any(
+            w in query
+            for w in ["who are you", "what are you", "what can you do", "capabilities", "help"]
+        ):
             answer = (
                 "I am your Multi-Agent Knowledge Base Q&A Assistant. I can help you with:\n"
                 "1. **Structured Data Analysis**: Query orders, sales, customer data using PostgreSQL, DuckDB, or Pandas.\n"
@@ -46,16 +49,20 @@ def chitchat_node(state: AgentState) -> Dict[str, Any]:
         span.end(output_data={"answer": answer})
 
         telemetry = state.get("telemetry", {}) or {}
-        telemetry.update({
-            "trace_id": trace.trace_id,
-            "route": "GREETING_OR_CHITCHAT",
-            "strategy_used": None,
-            "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
-            "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
-            "total_tokens": telemetry.get("total_tokens", 0) + prompt_tokens + completion_tokens,
-            "latency_ms": round(trace.latency_ms, 2),
-            "execution_success": True,
-        })
+        telemetry.update(
+            {
+                "trace_id": trace.trace_id,
+                "route": "GREETING_OR_CHITCHAT",
+                "strategy_used": None,
+                "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
+                "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
+                "total_tokens": telemetry.get("total_tokens", 0)
+                + prompt_tokens
+                + completion_tokens,
+                "latency_ms": round(trace.latency_ms, 2),
+                "execution_success": True,
+            }
+        )
 
         return {
             "final_answer": answer,

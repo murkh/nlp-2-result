@@ -4,10 +4,10 @@ Synthesizer Node, and Conversational Agent API Route.
 """
 
 import asyncio
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 
 from src.agent.graph import build_multi_agent_graph, get_agent_graph, route_intent, run_agent
 from src.agent.nodes.chitchat_node import chitchat_node
@@ -154,7 +154,9 @@ class TestAgentRouter(unittest.TestCase):
 
     def test_router_strategy_hints(self):
         """Verify query strategy hints route to the requested engine."""
-        d_pandas = self.router.classify_intent("Run pandas dataframe analysis to count completed orders")
+        d_pandas = self.router.classify_intent(
+            "Run pandas dataframe analysis to count completed orders"
+        )
         self.assertEqual(d_pandas.intent, "STRUCTURED_QUERY")
         self.assertEqual(d_pandas.suggested_strategy, "pandas_sandbox")
 
@@ -188,7 +190,9 @@ class TestAgentRouter(unittest.TestCase):
         d_struct = self.router.classify_intent("Hello! How many completed orders are there?")
         self.assertEqual(d_struct.intent, "STRUCTURED_QUERY")
 
-        d_unstruct = self.router.classify_intent("Hi there, what is the incident response protocol?")
+        d_unstruct = self.router.classify_intent(
+            "Hi there, what is the incident response protocol?"
+        )
         self.assertEqual(d_unstruct.intent, "UNSTRUCTURED_QUERY")
 
     # -------------------------------------------------------------------------
@@ -236,7 +240,10 @@ class TestAgentRouter(unittest.TestCase):
 
     def test_graph_unstructured_execution(self):
         """Verify graph execution on unstructured query retrieves chunks and includes citations."""
-        res = run_agent(query="What is the incident response protocol and post-mortem SLA?", session_id="sess_unstruct_1")
+        res = run_agent(
+            query="What is the incident response protocol and post-mortem SLA?",
+            session_id="sess_unstruct_1",
+        )
         self.assertEqual(res["intent"], "UNSTRUCTURED_QUERY")
         self.assertGreater(len(res["retrieved_chunks"]), 0)
         self.assertGreater(len(res["citations"]), 0)
@@ -306,13 +313,17 @@ class TestAgentRouter(unittest.TestCase):
         self.assertEqual(resp_greet.intent, "GREETING_OR_CHITCHAT")
         self.assertEqual(resp_greet.session_id, "api_sess_1")
 
-        req_struct = QueryAgentRequest(query="How many orders are completed?", session_id="api_sess_2")
+        req_struct = QueryAgentRequest(
+            query="How many orders are completed?", session_id="api_sess_2"
+        )
         resp_struct = asyncio.run(agent.query_agent_endpoint(req_struct))
         self.assertEqual(resp_struct.intent, "STRUCTURED_QUERY")
         self.assertGreater(resp_struct.token_usage.total_tokens, 0)
         self.assertGreaterEqual(resp_struct.metrics.total_latency_ms, 0.0)
 
-        req_unstruct = QueryAgentRequest(query="What is the return window policy?", session_id="api_sess_3")
+        req_unstruct = QueryAgentRequest(
+            query="What is the return window policy?", session_id="api_sess_3"
+        )
         resp_unstruct = asyncio.run(agent.query_agent_endpoint(req_unstruct))
         self.assertEqual(resp_unstruct.intent, "UNSTRUCTURED_QUERY")
         self.assertIn("30 days", resp_unstruct.answer)

@@ -12,6 +12,7 @@ except ImportError:
 
 try:
     from langchain_core.messages import BaseMessage
+
     MessageItem = BaseMessage
 except ImportError:
     MessageItem = Dict[str, Any]
@@ -19,6 +20,7 @@ except ImportError:
 
 class TelemetryData(TypedDict, total=False):
     """Execution telemetry recorded across graph nodes."""
+
     trace_id: str
     route: str
     strategy_used: Optional[str]
@@ -34,13 +36,16 @@ class AgentState(TypedDict, total=False):
     """
     Complete state passed between LangGraph nodes during multi-agent conversational Q&A.
     """
+
     # Conversational Input & Session Context
     query: str
     session_id: str
     messages: Annotated[List[Any], operator.add]
 
     # Routing & Intent Classification
-    intent: Optional[Literal["GREETING_OR_CHITCHAT", "AMBIGUOUS_QUERY", "STRUCTURED_QUERY", "UNSTRUCTURED_QUERY"]]
+    intent: Optional[
+        Literal["GREETING_OR_CHITCHAT", "AMBIGUOUS_QUERY", "STRUCTURED_QUERY", "UNSTRUCTURED_QUERY"]
+    ]
     confidence: float
     routing_reason: str
     suggested_strategy: Optional[Literal["dedicated_db", "duckdb", "pandas_sandbox"]]

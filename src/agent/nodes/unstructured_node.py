@@ -43,7 +43,11 @@ def unstructured_node(state: AgentState) -> Dict[str, Any]:
             completion_tokens = res.token_usage.completion_tokens
 
             for c in res.citations:
-                c_dict = c.model_dump() if hasattr(c, "model_dump") else (c.dict() if hasattr(c, "dict") else dict(c))
+                c_dict = (
+                    c.model_dump()
+                    if hasattr(c, "model_dump")
+                    else (c.dict() if hasattr(c, "dict") else dict(c))
+                )
                 citations_list.append(
                     f"[Doc: {c_dict.get('document_name')}, Page: {c_dict.get('page_number', 'N/A')}, Chunk: {c_dict.get('chunk_index')}]"
                 )
@@ -57,17 +61,21 @@ def unstructured_node(state: AgentState) -> Dict[str, Any]:
             span.end(status="ERROR", error=execution_error)
 
         telemetry = state.get("telemetry", {}) or {}
-        telemetry.update({
-            "trace_id": trace.trace_id,
-            "route": "UNSTRUCTURED_QUERY",
-            "strategy_used": "hybrid_rag",
-            "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
-            "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
-            "total_tokens": telemetry.get("total_tokens", 0) + prompt_tokens + completion_tokens,
-            "latency_ms": round(trace.latency_ms, 2),
-            "execution_success": execution_error is None,
-            "error": execution_error,
-        })
+        telemetry.update(
+            {
+                "trace_id": trace.trace_id,
+                "route": "UNSTRUCTURED_QUERY",
+                "strategy_used": "hybrid_rag",
+                "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
+                "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
+                "total_tokens": telemetry.get("total_tokens", 0)
+                + prompt_tokens
+                + completion_tokens,
+                "latency_ms": round(trace.latency_ms, 2),
+                "execution_success": execution_error is None,
+                "error": execution_error,
+            }
+        )
 
         return {
             "retrieved_chunks": retrieved_chunks,

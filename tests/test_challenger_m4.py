@@ -28,22 +28,22 @@ import time
 import unittest
 from typing import Any, Dict, List
 
-from src.evaluation.compat import pd, np, DataFrame, Series
+from src.evaluation.compat import DataFrame, Series, np, pd
 from src.evaluation.ragas_suite import (
-    RagasEvaluator,
     RagasEvaluationResult,
-    calculate_faithfulness,
+    RagasEvaluator,
     calculate_answer_relevancy,
     calculate_context_precision,
     calculate_context_recall,
+    calculate_faithfulness,
 )
 from src.evaluation.structured_equivalence import (
-    StructuredEquivalenceEvaluator,
     StructuredBenchmarkResult,
-    check_execution_equivalence,
+    StructuredEquivalenceEvaluator,
     assert_frame_equivalence,
-    calculate_syntax_first_pass_rate,
     calculate_equivalence_rate,
+    calculate_syntax_first_pass_rate,
+    check_execution_equivalence,
     compute_latency_statistics,
     estimate_token_cost,
     normalize_dataframe,
@@ -63,32 +63,37 @@ class TestRagasAdversarialStress(unittest.TestCase):
             (
                 ["Mix 200g of flour, 2 eggs, and 100ml milk to bake pancakes at 180C."],
                 "What is the pancake recipe?",
-                "Quantum superposition allows particles to exist in multiple eigenstates simultaneously."
+                "Quantum superposition allows particles to exist in multiple eigenstates simultaneously.",
             ),
             # Database context vs alien invasion answer
             (
                 ["PostgreSQL uses MVCC to manage concurrent transactions and row versions."],
                 "How does Postgres manage concurrency?",
-                "Extraterrestrial life forms arrived in 1947 and established secret subterranean bases."
+                "Extraterrestrial life forms arrived in 1947 and established secret subterranean bases.",
             ),
             # Security context vs crypto marketing answer
             (
-                ["AST whitelist restricts import statements and prevents arbitrary code execution."],
+                [
+                    "AST whitelist restricts import statements and prevents arbitrary code execution."
+                ],
                 "How is code execution secured?",
-                "Buy Bitcoin and Ethereum for guaranteed 1000x returns on decentralized exchanges."
+                "Buy Bitcoin and Ethereum for guaranteed 1000x returns on decentralized exchanges.",
             ),
         ]
 
         for ctxs, q, ans in test_pairs:
             score = calculate_faithfulness(question=q, answer=ans, contexts=ctxs)
             self.assertEqual(
-                score, 0.0,
-                f"Expected 0.0 faithfulness for hallucinated answer: '{ans}', got {score}"
+                score,
+                0.0,
+                f"Expected 0.0 faithfulness for hallucinated answer: '{ans}', got {score}",
             )
 
     def test_inverted_antonym_contradictions(self):
         """Verify answers that contradict the context yield low/zero faithfulness."""
-        ctx = ["The system strictly forbids anonymous access and requires two-factor authentication."]
+        ctx = [
+            "The system strictly forbids anonymous access and requires two-factor authentication."
+        ]
         q = "Is anonymous access permitted?"
         ans = "The system openly welcomes unrestricted anonymous guests without passwords."
         score = calculate_faithfulness(question=q, answer=ans, contexts=ctx)
@@ -106,28 +111,28 @@ class TestRagasAdversarialStress(unittest.TestCase):
         precision = calculate_context_precision(
             question=irrelevant_q,
             contexts=contexts,
-            ground_truth="Freeze fresh strawberries with heavy whipping cream and condensed sugar."
+            ground_truth="Freeze fresh strawberries with heavy whipping cream and condensed sugar.",
         )
         # Contexts do not contain strawberry ice cream information
         self.assertEqual(precision, 0.0)
 
         relevancy_cross = calculate_answer_relevancy(
-            question="What are DuckDB performance characteristics?",
-            answer=irrelevant_ans
+            question="What are DuckDB performance characteristics?", answer=irrelevant_ans
         )
         self.assertEqual(relevancy_cross, 0.0)
 
     def test_numerical_claim_adversarial_mismatch(self):
         """Verify faithfulness is 0.0 when sentence words match but numeric quantities differ."""
-        ctx = ["The sandbox enforces a memory limit of 512MB and a timeout of 5.0 seconds with 20 max items."]
+        ctx = [
+            "The sandbox enforces a memory limit of 512MB and a timeout of 5.0 seconds with 20 max items."
+        ]
         q = "What are the sandbox resource limits?"
         # Words are identical except numbers: 1024MB vs 512MB, 15.0s vs 5.0s, 100 vs 20
         ans_wrong_numbers = "The sandbox enforces a memory limit of 1024MB and a timeout of 15.0 seconds with 100 max items."
-        
+
         score = calculate_faithfulness(question=q, answer=ans_wrong_numbers, contexts=ctx)
         self.assertEqual(
-            score, 0.0,
-            f"Expected 0.0 faithfulness when numerical entities mismatch, got {score}"
+            score, 0.0, f"Expected 0.0 faithfulness when numerical entities mismatch, got {score}"
         )
 
     def test_ragas_boundary_inputs_whitespace_none_punctuation_emoji(self):
@@ -164,51 +169,63 @@ class TestRagasAdversarialStress(unittest.TestCase):
             case_type = i % 5
             if case_type == 0:
                 # Grounded
-                batch_cases.append({
-                    "test_id": f"batch_{i:03d}",
-                    "question": f"What is parameter alpha_{i} configured to?",
-                    "contexts": [f"Configuration setting alpha_{i} is defined as value_{i} in system profile."],
-                    "answer": f"Parameter alpha_{i} is configured to value_{i}.",
-                    "ground_truth": f"alpha_{i} is configured to value_{i}.",
-                })
+                batch_cases.append(
+                    {
+                        "test_id": f"batch_{i:03d}",
+                        "question": f"What is parameter alpha_{i} configured to?",
+                        "contexts": [
+                            f"Configuration setting alpha_{i} is defined as value_{i} in system profile."
+                        ],
+                        "answer": f"Parameter alpha_{i} is configured to value_{i}.",
+                        "ground_truth": f"alpha_{i} is configured to value_{i}.",
+                    }
+                )
             elif case_type == 1:
                 # Hallucinated
-                batch_cases.append({
-                    "test_id": f"batch_{i:03d}",
-                    "question": f"What is beta_{i} status?",
-                    "contexts": [f"Beta_{i} service was deprecated in revision 4."],
-                    "answer": f"Beta_{i} is actively processing 10000 transactions per second on Kubernetes cluster.",
-                    "ground_truth": f"Beta_{i} was deprecated in revision 4.",
-                })
+                batch_cases.append(
+                    {
+                        "test_id": f"batch_{i:03d}",
+                        "question": f"What is beta_{i} status?",
+                        "contexts": [f"Beta_{i} service was deprecated in revision 4."],
+                        "answer": f"Beta_{i} is actively processing 10000 transactions per second on Kubernetes cluster.",
+                        "ground_truth": f"Beta_{i} was deprecated in revision 4.",
+                    }
+                )
             elif case_type == 2:
                 # Empty context
-                batch_cases.append({
-                    "test_id": f"batch_{i:03d}",
-                    "question": f"What is gamma_{i}?",
-                    "contexts": [],
-                    "answer": f"Gamma_{i} is unknown.",
-                    "ground_truth": f"Gamma_{i} is unknown.",
-                })
+                batch_cases.append(
+                    {
+                        "test_id": f"batch_{i:03d}",
+                        "question": f"What is gamma_{i}?",
+                        "contexts": [],
+                        "answer": f"Gamma_{i} is unknown.",
+                        "ground_truth": f"Gamma_{i} is unknown.",
+                    }
+                )
             elif case_type == 3:
                 # Partial recall
-                batch_cases.append({
-                    "test_id": f"batch_{i:03d}",
-                    "question": f"List features of delta_{i}",
-                    "contexts": [f"Delta_{i} includes high-availability replication."],
-                    "answer": f"Delta_{i} includes high-availability replication and auto-sharding.",
-                    "ground_truth": f"Delta_{i} includes high-availability replication; Delta_{i} includes automated backup; Delta_{i} includes multi-region sync.",
-                })
+                batch_cases.append(
+                    {
+                        "test_id": f"batch_{i:03d}",
+                        "question": f"List features of delta_{i}",
+                        "contexts": [f"Delta_{i} includes high-availability replication."],
+                        "answer": f"Delta_{i} includes high-availability replication and auto-sharding.",
+                        "ground_truth": f"Delta_{i} includes high-availability replication; Delta_{i} includes automated backup; Delta_{i} includes multi-region sync.",
+                    }
+                )
             else:
                 # Multiline with formatting
-                batch_cases.append({
-                    "test_id": f"batch_{i:03d}",
-                    "question": f"Explain security policy for node_{i}",
-                    "contexts": [
-                        f"- Node_{i} requires TLS 1.3 encryption.\n- Port 443 must remain open.\n- Admin access is restricted."
-                    ],
-                    "answer": f"Node_{i} requires TLS 1.3 encryption and admin access is restricted.",
-                    "ground_truth": f"Node_{i} requires TLS 1.3 encryption.",
-                })
+                batch_cases.append(
+                    {
+                        "test_id": f"batch_{i:03d}",
+                        "question": f"Explain security policy for node_{i}",
+                        "contexts": [
+                            f"- Node_{i} requires TLS 1.3 encryption.\n- Port 443 must remain open.\n- Admin access is restricted."
+                        ],
+                        "answer": f"Node_{i} requires TLS 1.3 encryption and admin access is restricted.",
+                        "ground_truth": f"Node_{i} requires TLS 1.3 encryption.",
+                    }
+                )
 
         start_time = time.time()
         result = self.evaluator.evaluate_test_cases(batch_cases)
@@ -257,7 +274,9 @@ class TestStructuredEquivalenceAdversarialStress(unittest.TestCase):
         df_gen_edge_fail = pd.DataFrame({"amt": [base_val + 0.00025]})
         is_eq, msg = check_execution_equivalence(df_gen_edge_fail, df_gold, tolerance=1e-4)
         self.assertFalse(is_eq, "Expected 2.5e-4 difference to exceed tolerance and fail")
-        self.assertTrue("different" in msg.lower() or "diff" in msg.lower() or "mismatch" in msg.lower())
+        self.assertTrue(
+            "different" in msg.lower() or "diff" in msg.lower() or "mismatch" in msg.lower()
+        )
 
         # 4. Delta = 0.001 (1e-3) -> exceeds atol=1e-4 -> NOT EQUIVALENT
         df_gen_large_diff = pd.DataFrame({"amt": [base_val + 0.001]})
@@ -267,58 +286,58 @@ class TestStructuredEquivalenceAdversarialStress(unittest.TestCase):
     def test_mixed_types_and_string_represented_numbers(self):
         """Verify columns with string-represented numbers match actual numeric columns after normalization."""
         # e.g. DuckDB returning float vs Postgres returning numeric string or int vs float
-        df_gold = pd.DataFrame({
-            "order_id": [1, 2, 3],
-            "price": [10.50, 20.00, 30.75],
-            "is_active": [True, False, True]
-        })
-        df_gen = pd.DataFrame({
-            "order_id": ["1", "2", "3"],
-            "price": ["10.5000", "20.0000", "30.7500"],
-            "is_active": [True, False, True]
-        })
+        df_gold = pd.DataFrame(
+            {
+                "order_id": [1, 2, 3],
+                "price": [10.50, 20.00, 30.75],
+                "is_active": [True, False, True],
+            }
+        )
+        df_gen = pd.DataFrame(
+            {
+                "order_id": ["1", "2", "3"],
+                "price": ["10.5000", "20.0000", "30.7500"],
+                "is_active": [True, False, True],
+            }
+        )
 
         is_eq, msg = check_execution_equivalence(df_gen, df_gold)
-        self.assertTrue(is_eq, f"Expected string-encoded numbers to normalize to numeric equivalence: {msg}")
+        self.assertTrue(
+            is_eq, f"Expected string-encoded numbers to normalize to numeric equivalence: {msg}"
+        )
 
     def test_unicode_special_chars_and_whitespace_padding(self):
         """Verify normalization trims whitespace and preserves unicode/special characters."""
-        df_gold = pd.DataFrame({
-            "name": [" René Descartes ", " 東京 (Tokyo) ", "Café & Bakery © "],
-            "status": [" OPEN ", " CLOSED ", " PENDING "]
-        })
-        df_gen = pd.DataFrame({
-            "status": ["CLOSED", "OPEN", "PENDING"],
-            "name": ["東京 (Tokyo)", "René Descartes", "Café & Bakery ©"]
-        })
+        df_gold = pd.DataFrame(
+            {
+                "name": [" René Descartes ", " 東京 (Tokyo) ", "Café & Bakery © "],
+                "status": [" OPEN ", " CLOSED ", " PENDING "],
+            }
+        )
+        df_gen = pd.DataFrame(
+            {
+                "status": ["CLOSED", "OPEN", "PENDING"],
+                "name": ["東京 (Tokyo)", "René Descartes", "Café & Bakery ©"],
+            }
+        )
 
         is_eq, msg = check_execution_equivalence(df_gen, df_gold)
         self.assertTrue(is_eq, f"Expected unicode and whitespace-trimmed rows to match: {msg}")
 
     def test_null_none_nan_representation_invariance(self):
         """Verify various representations of null (None, NaN, 'None', 'null', 'nan', '') match across engines."""
-        df1 = pd.DataFrame({
-            "id": [1, 2, 3, 4],
-            "val": [10.0, None, float("nan"), 40.0]
-        })
-        df2 = pd.DataFrame({
-            "id": [1, 2, 3, 4],
-            "val": [10.0, float("nan"), None, 40.0]
-        })
+        df1 = pd.DataFrame({"id": [1, 2, 3, 4], "val": [10.0, None, float("nan"), 40.0]})
+        df2 = pd.DataFrame({"id": [1, 2, 3, 4], "val": [10.0, float("nan"), None, 40.0]})
 
         is_eq, msg = check_execution_equivalence(df1, df2)
-        self.assertTrue(is_eq, f"Expected None and NaN to be equivalent null representations: {msg}")
+        self.assertTrue(
+            is_eq, f"Expected None and NaN to be equivalent null representations: {msg}"
+        )
 
     def test_nested_dictionaries_in_dataframe_cells(self):
         """Verify DataFrames with complex/nested dictionary structures do not crash normalizer."""
-        df_gold = pd.DataFrame({
-            "id": [1, 2],
-            "meta": [{"tags": ["a", "b"]}, {"tags": ["c"]}]
-        })
-        df_gen = pd.DataFrame({
-            "id": [1, 2],
-            "meta": [{"tags": ["a", "b"]}, {"tags": ["c"]}]
-        })
+        df_gold = pd.DataFrame({"id": [1, 2], "meta": [{"tags": ["a", "b"]}, {"tags": ["c"]}]})
+        df_gen = pd.DataFrame({"id": [1, 2], "meta": [{"tags": ["a", "b"]}, {"tags": ["c"]}]})
 
         norm_gold = normalize_dataframe(df_gold)
         norm_gen = normalize_dataframe(df_gen)
@@ -336,32 +355,38 @@ class TestStructuredEquivalenceAdversarialStress(unittest.TestCase):
         ratings = [round(random.uniform(1.0, 5.0), 2) for _ in range(num_rows)]
         flags = [i % 2 == 0 for i in range(num_rows)]
 
-        df_gold = pd.DataFrame({
-            "id": ids,
-            "category": categories,
-            "amount": amounts,
-            "rating": ratings,
-            "is_valid": flags,
-        })
+        df_gold = pd.DataFrame(
+            {
+                "id": ids,
+                "category": categories,
+                "amount": amounts,
+                "rating": ratings,
+                "is_valid": flags,
+            }
+        )
 
         # Create permuted generated DataFrame with slightly scrambled columns and shuffled rows
         shuffled_indices = list(range(num_rows))
         random.shuffle(shuffled_indices)
 
-        df_gen = pd.DataFrame({
-            "rating": [ratings[i] for i in shuffled_indices],
-            "amount": [amounts[i] for i in shuffled_indices],
-            "id": [ids[i] for i in shuffled_indices],
-            "is_valid": [flags[i] for i in shuffled_indices],
-            "category": [categories[i] for i in shuffled_indices],
-        })
+        df_gen = pd.DataFrame(
+            {
+                "rating": [ratings[i] for i in shuffled_indices],
+                "amount": [amounts[i] for i in shuffled_indices],
+                "id": [ids[i] for i in shuffled_indices],
+                "is_valid": [flags[i] for i in shuffled_indices],
+                "category": [categories[i] for i in shuffled_indices],
+            }
+        )
 
         start_time = time.time()
         is_eq, msg = check_execution_equivalence(df_gen, df_gold, tolerance=1e-4)
         elapsed = time.time() - start_time
 
         self.assertTrue(is_eq, f"10,000-row permuted equivalence failed: {msg}")
-        self.assertLess(elapsed, 4.0, f"10,000-row normalization took {elapsed:.2f}s (expected < 4.0s)")
+        self.assertLess(
+            elapsed, 4.0, f"10,000-row normalization took {elapsed:.2f}s (expected < 4.0s)"
+        )
 
     def test_extreme_empty_and_zero_shape_permutations(self):
         """Verify handling of extreme shape variations (0x0, 0x5, 5x0)."""
@@ -426,20 +451,26 @@ class TestBenchmarkRunnerAndTelemetryAdversarialStress(unittest.TestCase):
         test_cases = []
         for i in range(100):
             eng = ["dedicated_db", "duckdb", "pandas_sandbox"][i % 3]
-            is_match = (i % 4 != 0)  # 75% match, 25% mismatch
+            is_match = i % 4 != 0  # 75% match, 25% mismatch
             val_gen = float(i) if is_match else float(i + 9999)
 
-            test_cases.append({
-                "test_id": f"tc_{i:03d}",
-                "query": f"Query #{i}",
-                "engine": eng,
-                "df_golden": pd.DataFrame({"result": [float(i)]}),
-                "df_generated": pd.DataFrame({"result": [val_gen]}),
-                "latency_ms": 10.0 + (i * 0.5),
-                "prompt_tokens": 100 + i,
-                "completion_tokens": 20 + (i % 10),
-                "error": None if i % 10 != 0 else "Simulated Execution Error" if not is_match else None,
-            })
+            test_cases.append(
+                {
+                    "test_id": f"tc_{i:03d}",
+                    "query": f"Query #{i}",
+                    "engine": eng,
+                    "df_golden": pd.DataFrame({"result": [float(i)]}),
+                    "df_generated": pd.DataFrame({"result": [val_gen]}),
+                    "latency_ms": 10.0 + (i * 0.5),
+                    "prompt_tokens": 100 + i,
+                    "completion_tokens": 20 + (i % 10),
+                    "error": (
+                        None
+                        if i % 10 != 0
+                        else "Simulated Execution Error" if not is_match else None
+                    ),
+                }
+            )
 
         evaluator = StructuredEquivalenceEvaluator(tolerance=1e-4)
         result = evaluator.evaluate_benchmark(test_cases)

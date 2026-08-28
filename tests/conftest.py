@@ -4,9 +4,9 @@ Supports both pytest test runner and standard unittest test execution.
 """
 
 import os
-from pathlib import Path
 import shutil
 import tempfile
+from pathlib import Path
 from typing import Generator
 
 from src.config import Settings
@@ -25,6 +25,7 @@ os.environ["STORAGE_DIR"] = "/tmp/test_blobs_root"
 # Conditional pytest import so tests run with stdlib unittest or pytest
 try:
     import pytest
+
     _has_pytest = True
 except ImportError:
     _has_pytest = False
@@ -42,7 +43,11 @@ def create_test_fixtures():
         db_manager=test_db, blob_manager=blob_mgr, metadata_extractor=meta_extractor
     )
     unstruct_engine = UnstructuredIngestionEngine(
-        db_manager=test_db, blob_manager=blob_mgr, embedding_service=emb_service, chunk_size=400, chunk_overlap=80
+        db_manager=test_db,
+        blob_manager=blob_mgr,
+        embedding_service=emb_service,
+        chunk_size=400,
+        chunk_overlap=80,
     )
     pruner = TwoStageSchemaPruner(
         db_manager=test_db, blob_manager=blob_mgr, embedding_service=emb_service
@@ -91,6 +96,7 @@ SAMPLE_MARKDOWN_TEXT = (
 )
 
 if _has_pytest:
+
     @pytest.fixture
     def temp_blob_dir() -> Generator[Path, None, None]:
         temp_dir = Path(tempfile.mkdtemp(prefix="test_blobs_"))

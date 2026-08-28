@@ -17,6 +17,7 @@ from src.storage.blob_store import BlobStorageManager, get_blob_manager
 @dataclass
 class PrunedColumn:
     """Retained column in the pruned schema."""
+
     column_name: str
     data_type: str
     is_primary_key: bool
@@ -28,6 +29,7 @@ class PrunedColumn:
 @dataclass
 class PrunedTable:
     """Retained table and its pruned columns in the pruned schema."""
+
     table_id: str
     table_name: str
     display_name: str
@@ -39,6 +41,7 @@ class PrunedTable:
 @dataclass
 class PrunedSchemaContext:
     """Output context produced by the Two-Stage Schema Pruner."""
+
     table_names: List[str]
     table_ids: List[str]
     ddl_prompt_snippet: str
@@ -103,16 +106,18 @@ class TwoStageSchemaPruner:
             # Fallback: get any available tables if no embeddings matched
             all_tables = self.db_manager.list_tables()
             for t in all_tables[:k_tables]:
-                candidate_tables_raw.append({
-                    "id": t.id,
-                    "dataset_id": t.dataset_id,
-                    "table_name": t.table_name,
-                    "display_name": t.display_name,
-                    "description": t.description,
-                    "row_count": t.row_count,
-                    "column_count": t.column_count,
-                    "similarity": 0.5,
-                })
+                candidate_tables_raw.append(
+                    {
+                        "id": t.id,
+                        "dataset_id": t.dataset_id,
+                        "table_name": t.table_name,
+                        "display_name": t.display_name,
+                        "description": t.description,
+                        "row_count": t.row_count,
+                        "column_count": t.column_count,
+                        "similarity": 0.5,
+                    }
+                )
 
         if not candidate_tables_raw:
             empty_ddl = "-- No structured database tables found.\n"
@@ -167,7 +172,9 @@ class TwoStageSchemaPruner:
             current_table_col_count = len(cols_by_table[tid])
 
             # Retain column if within table limit and global limit, OR if it is a PK/FK
-            if (current_table_col_count < cols_per_table and total_retained_cols < max_cols) or is_key:
+            if (
+                current_table_col_count < cols_per_table and total_retained_cols < max_cols
+            ) or is_key:
                 p_col = PrunedColumn(
                     column_name=crow["column_name"],
                     data_type=crow["data_type"],
@@ -190,11 +197,15 @@ class TwoStageSchemaPruner:
 
         token_pruned = estimate_token_count(pruned_ddl)
         token_full = max(token_pruned, estimate_token_count(full_ddl))
-        savings_percent = round(((token_full - token_pruned) / token_full * 100.0), 2) if token_full > 0 else 0.0
+        savings_percent = (
+            round(((token_full - token_pruned) / token_full * 100.0), 2) if token_full > 0 else 0.0
+        )
 
         table_names = [t.table_name for t in table_map.values()]
         file_paths = {t.table_name: t.blob_path for t in table_map.values() if t.blob_path}
-        retained_columns = {t.table_name: [c.column_name for c in t.columns] for t in table_map.values()}
+        retained_columns = {
+            t.table_name: [c.column_name for c in t.columns] for t in table_map.values()
+        }
 
         return PrunedSchemaContext(
             table_names=table_names,
@@ -230,8 +241,14 @@ class TwoStageSchemaPruner:
             for col in t.columns:
                 pk_flag = " PRIMARY KEY" if col.is_primary_key else ""
                 fk_flag = " -- FOREIGN KEY" if col.is_foreign_key else ""
-                samples_str = f" -- samples: {col.sample_values}" if col.sample_values and not col.is_foreign_key else ""
-                col_defs.append(f"    {col.column_name} {col.data_type}{pk_flag},{fk_flag}{samples_str}")
+                samples_str = (
+                    f" -- samples: {col.sample_values}"
+                    if col.sample_values and not col.is_foreign_key
+                    else ""
+                )
+                col_defs.append(
+                    f"    {col.column_name} {col.data_type}{pk_flag},{fk_flag}{samples_str}"
+                )
 
             if not col_defs:
                 col_defs.append("    -- (Columns filtered out by pruning)")

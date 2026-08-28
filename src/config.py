@@ -3,8 +3,8 @@ Application Configuration Module for Multi-Agent Knowledge Base Q&A Platform.
 Uses Pydantic V2 / pydantic-settings when available, with standard library fallback.
 """
 
-from functools import lru_cache
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -17,6 +17,7 @@ try:
 
     class Settings(BaseSettings):
         """Application settings loaded from environment variables or .env file."""
+
         model_config = SettingsConfigDict(
             env_file=str(BASE_DIR / ".env"),
             env_file_encoding="utf-8",
@@ -93,18 +94,22 @@ except ImportError:
             self.db_name: str = os.getenv("POSTGRES_DB", "knowledge_qa")
             self.database_url: str = os.getenv(
                 "DATABASE_URL",
-                f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+                f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}",
             )
             self.async_database_url: str = os.getenv(
                 "ASYNC_DATABASE_URL",
-                f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+                f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}",
             )
 
             raw_blob = os.getenv("BLOB_STORAGE_PATH")
-            self.blob_storage_path: Path = Path(raw_blob) if raw_blob else BASE_DIR / "data" / "blob"
+            self.blob_storage_path: Path = (
+                Path(raw_blob) if raw_blob else BASE_DIR / "data" / "blob"
+            )
 
             raw_samples = os.getenv("SAMPLES_PATH")
-            self.samples_path: Path = Path(raw_samples) if raw_samples else BASE_DIR / "data" / "samples"
+            self.samples_path: Path = (
+                Path(raw_samples) if raw_samples else BASE_DIR / "data" / "samples"
+            )
 
             self.embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "mock")
             self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
@@ -121,7 +126,10 @@ except ImportError:
             self.default_max_cols_per_table: int = int(os.getenv("DEFAULT_MAX_COLS_PER_TABLE", "8"))
             self.default_total_max_cols: int = int(os.getenv("DEFAULT_TOTAL_MAX_COLS", "20"))
 
-            self.langfuse_enabled: bool = os.getenv("LANGFUSE_ENABLED", "false").lower() in ("true", "1")
+            self.langfuse_enabled: bool = os.getenv("LANGFUSE_ENABLED", "false").lower() in (
+                "true",
+                "1",
+            )
             self.langfuse_public_key: Optional[str] = os.getenv("LANGFUSE_PUBLIC_KEY")
             self.langfuse_secret_key: Optional[str] = os.getenv("LANGFUSE_SECRET_KEY")
             self.langfuse_host: str = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")

@@ -7,10 +7,10 @@ and populates TableMetadata & ColumnMetadata for two-stage schema pruning.
 import csv
 import io
 import os
-from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
 import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import ColumnMetadata, Dataset, TableMetadata
@@ -120,7 +120,9 @@ class StructuredIngestionEngine:
         # 5. Create dedicated table in DB
         col_defs = [(c.column_name, c.data_type) for c in col_metas]
         pk_col = next((c.column_name for c in col_metas if c.is_primary_key), None)
-        self.db_manager.create_dedicated_table(table_name=table_name, column_defs=col_defs, pkey_col=pk_col)
+        self.db_manager.create_dedicated_table(
+            table_name=table_name, column_defs=col_defs, pkey_col=pk_col
+        )
 
         # 6. Bulk insert rows into dedicated table
         self.db_manager.insert_table_rows(table_name=table_name, columns=clean_columns, rows=rows)
@@ -160,7 +162,9 @@ class StructuredIngestionEngine:
             # Attempt CSV parsing as fallback
             return self._parse_csv(file_path)
 
-    def _parse_csv(self, file_path: Path, delimiter: str = ",") -> Tuple[List[str], List[List[Any]]]:
+    def _parse_csv(
+        self, file_path: Path, delimiter: str = ","
+    ) -> Tuple[List[str], List[List[Any]]]:
         """Parse CSV/TSV file with dialect sniffing and type conversion."""
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             reader = csv.reader(f, delimiter=delimiter)
@@ -189,6 +193,7 @@ class StructuredIngestionEngine:
         """Parse Parquet file using pyarrow, pandas, or fastparquet."""
         try:
             import pyarrow.parquet as pq
+
             table = pq.read_table(file_path)
             columns = table.column_names
             rows = table.to_pylist()
@@ -198,6 +203,7 @@ class StructuredIngestionEngine:
         except ImportError:
             try:
                 import pandas as pd
+
                 df = pd.read_parquet(file_path)
                 columns = list(df.columns)
                 rows = df.values.tolist()
@@ -210,6 +216,7 @@ class StructuredIngestionEngine:
         """Parse Excel (.xlsx / .xls) workbook sheet."""
         try:
             import openpyxl
+
             wb = openpyxl.load_workbook(file_path, data_only=True)
             sheet = wb.active
             rows_iter = sheet.iter_rows(values_only=True)
@@ -217,16 +224,19 @@ class StructuredIngestionEngine:
             if not header_row:
                 return [], []
 
-            columns = [str(c).strip() if c is not None else f"col_{i+1}" for i, c in enumerate(header_row)]
+            columns = [
+                str(c).strip() if c is not None else f"col_{i+1}" for i, c in enumerate(header_row)
+            ]
             rows = []
             for r in rows_iter:
                 if not r or all(c is None for c in r):
                     continue
-                rows.append([self._convert_cell_value(c) for c in r[:len(columns)]])
+                rows.append([self._convert_cell_value(c) for c in r[: len(columns)]])
             return columns, rows
         except ImportError:
             try:
                 import pandas as pd
+
                 df = pd.read_excel(file_path)
                 columns = list(df.columns)
                 rows = df.values.tolist()

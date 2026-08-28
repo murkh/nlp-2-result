@@ -4,8 +4,8 @@ Verifies query generation, read-only execution, LIMIT 20 enforcement,
 destructive query rejection, and response synthesis.
 """
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from src.api.schemas import QueryDedicatedDBRequest
 from tests.conftest import create_test_fixtures
@@ -39,6 +39,7 @@ class TestDedicatedDBEngine(unittest.TestCase):
         )
 
         from src.engines.dedicated_db import DedicatedDBEngine
+
         self.settings = fixtures.get("settings")
         self.engine = DedicatedDBEngine(
             db_manager=self.db_manager,
@@ -48,6 +49,7 @@ class TestDedicatedDBEngine(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_count_query_execution(self):
@@ -96,6 +98,7 @@ class TestDedicatedDBEngine(unittest.TestCase):
     def test_security_rejection_for_destructive_sql(self):
         """Verify that destructive SQL statements (DROP, DELETE, UPDATE) are blocked."""
         from src.engines.dedicated_db import validate_sql_security
+
         self.assertFalse(validate_sql_security("DROP TABLE tbl_orders;")[0])
         self.assertFalse(validate_sql_security("DELETE FROM tbl_orders WHERE id = 1;")[0])
         self.assertFalse(validate_sql_security("UPDATE tbl_orders SET status = 'hack';")[0])

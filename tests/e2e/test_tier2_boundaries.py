@@ -8,13 +8,14 @@ empty/corrupt inputs, resource limits, and extreme values across all 15 platform
 
 import ast
 import json
-import uuid
 import tempfile
+import uuid
 from pathlib import Path
-from typing import Dict, List, Any
-import pytest
-import pandas as pd
+from typing import Any, Dict, List
+
 import numpy as np
+import pandas as pd
+import pytest
 
 
 # =============================================================================
@@ -26,7 +27,7 @@ class TestFeature1Boundaries:
     def test_bva1_empty_csv_file_zero_rows_rejection(self, tmp_path):
         empty_csv = tmp_path / "empty.csv"
         empty_csv.write_text("", encoding="utf-8")
-        
+
         # Ingestion must detect empty file and raise ValueError or return structured error
         with pytest.raises((ValueError, pd.errors.EmptyDataError)):
             pd.read_csv(empty_csv)
@@ -43,7 +44,7 @@ class TestFeature1Boundaries:
         wide_df = pd.DataFrame(data)
         wide_csv = tmp_path / "wide.csv"
         wide_df.to_csv(wide_csv, index=False)
-        
+
         loaded = pd.read_csv(wide_csv)
         assert loaded.shape == (2, 100)
         assert "col_99" in loaded.columns
@@ -52,7 +53,7 @@ class TestFeature1Boundaries:
         csv_content = 'id,description,status\n1,"Order, with comma\nand newline","Active"\n'
         csv_path = tmp_path / "complex_quotes.csv"
         csv_path.write_text(csv_content, encoding="utf-8")
-        
+
         df = pd.read_csv(csv_path)
         assert len(df) == 1
         assert "with comma\nand newline" in df.iloc[0]["description"]
@@ -60,7 +61,7 @@ class TestFeature1Boundaries:
     def test_bva1_corrupt_parquet_header_detection_and_error(self, tmp_path):
         corrupt_parquet = tmp_path / "corrupt.parquet"
         corrupt_parquet.write_bytes(b"NOT_A_VALID_PARQUET_HEADER_DATA_12345")
-        
+
         with pytest.raises(Exception):
             pd.read_parquet(corrupt_parquet)
 
@@ -76,23 +77,25 @@ class TestFeature2Boundaries:
         zero_txt.write_text("", encoding="utf-8")
         content = zero_txt.read_text(encoding="utf-8")
         assert len(content) == 0
-        
+
         # Chunker should return empty list or 0 chunks without throwing unhandled exception
-        chunks = [content[i:i+800] for i in range(0, len(content), 650)] if content else []
+        chunks = [content[i : i + 800] for i in range(0, len(content), 650)] if content else []
         assert len(chunks) == 0
 
     def test_bva2_massive_single_paragraph_without_whitespace_chunking(self):
         massive_text = "A" * 5000  # 5000 characters without whitespace or newline
         chunk_size = 800
-        chunks = [massive_text[i:i+chunk_size] for i in range(0, len(massive_text), chunk_size)]
+        chunks = [massive_text[i : i + chunk_size] for i in range(0, len(massive_text), chunk_size)]
         assert len(chunks) == 7
         assert all(len(c) <= 800 for c in chunks)
 
     def test_bva2_document_with_unicode_emojis_cjk_math_symbols(self, tmp_path):
-        unicode_doc = "🚀 AI Model 🤖: 日本語テキスト — ∫(x^2 dx) = (1/3)x^3 + C. Special chars: <>&\"'\\/"
+        unicode_doc = (
+            "🚀 AI Model 🤖: 日本語テキスト — ∫(x^2 dx) = (1/3)x^3 + C. Special chars: <>&\"'\\/"
+        )
         doc_path = tmp_path / "unicode.txt"
         doc_path.write_text(unicode_doc, encoding="utf-8")
-        
+
         read_back = doc_path.read_text(encoding="utf-8")
         assert "🚀" in read_back
         assert "日本語" in read_back
@@ -121,17 +124,14 @@ class TestFeature3Boundaries:
         df = pd.DataFrame({"empty_col": [None, None, np.nan, None]})
         null_pct = float(df["empty_col"].isnull().mean() * 100.0)
         distinct_cnt = int(df["empty_col"].nunique(dropna=True))
-        
+
         assert null_pct == 100.0
         assert distinct_cnt == 0
 
     def test_bva3_table_with_reserved_sql_keywords_as_column_names(self):
-        reserved_df = pd.DataFrame({
-            "select": [1, 2],
-            "from": ["a", "b"],
-            "where": [True, False],
-            "group": [10, 20]
-        })
+        reserved_df = pd.DataFrame(
+            {"select": [1, 2], "from": ["a", "b"], "where": [True, False], "group": [10, 20]}
+        )
         # Verifies column names can be safely escaped with double quotes
         escaped_cols = [f'"{c}"' for c in reserved_df.columns]
         assert '"select"' in escaped_cols
@@ -148,7 +148,7 @@ class TestFeature3Boundaries:
         # 10,000 unique IDs vs single constant column
         unique_series = pd.Series(range(10000))
         constant_series = pd.Series(["CONST"] * 10000)
-        
+
         assert unique_series.nunique() == 10000
         assert constant_series.nunique() == 1
 
@@ -184,7 +184,7 @@ class TestFeature4Boundaries:
 
     def test_bva4_enforce_limit_20_when_user_requests_all_rows(self):
         user_query = "Give me all 1,000,000 rows without any limit"
-        
+
         def sanitize_query_limit(generated_sql: str) -> str:
             upper_sql = generated_sql.upper()
             if "LIMIT" not in upper_sql:
@@ -212,10 +212,10 @@ class TestFeature5Boundaries:
         injection_payloads = [
             "SELECT * FROM tbl_sales; DROP TABLE tbl_sales; --",
             "'; DROP TABLE users; --",
-            "SELECT * FROM tbl_sales WHERE 1=1; TRUNCATE tbl_sales;"
+            "SELECT * FROM tbl_sales WHERE 1=1; TRUNCATE tbl_sales;",
         ]
         disallowed = ["DROP", "TRUNCATE", "DELETE", "UPDATE", "ALTER", "INSERT"]
-        
+
         for payload in injection_payloads:
             has_forbidden = any(word in payload.upper().split() for word in disallowed)
             assert has_forbidden is True
@@ -223,7 +223,7 @@ class TestFeature5Boundaries:
     def test_bva5_sql_destructive_update_delete_blocked(self):
         read_only_allowed = ["SELECT", "WITH", "EXPLAIN", "SHOW"]
         mutations = ["UPDATE tbl_sales SET amount = 0", "DELETE FROM tbl_sales"]
-        
+
         for sql in mutations:
             first_keyword = sql.strip().split()[0].upper()
             assert first_keyword not in read_only_allowed
@@ -233,7 +233,7 @@ class TestFeature5Boundaries:
             "status": "error",
             "error_type": "SyntaxError",
             "message": "syntax error at or near 'FORM'",
-            "code": "42601"
+            "code": "42601",
         }
         assert error_response["status"] == "error"
         assert "message" in error_response
@@ -259,12 +259,8 @@ class TestFeature6Boundaries:
     """Path traversal, missing files, and memory boundary tests for DuckDB engine."""
 
     def test_bva6_duckdb_path_traversal_attempt_blocked(self):
-        traversal_paths = [
-            "../../../../etc/passwd",
-            "/etc/shadow",
-            "../../root.key"
-        ]
-        
+        traversal_paths = ["../../../../etc/passwd", "/etc/shadow", "../../root.key"]
+
         base_dir = Path("/tmp/storage/blobs").resolve()
         for p in traversal_paths:
             if p.startswith("/"):
@@ -282,6 +278,7 @@ class TestFeature6Boundaries:
 
     def test_bva6_duckdb_query_missing_blob_file_error(self):
         import duckdb
+
         con = duckdb.connect(":memory:")
         with pytest.raises(Exception):
             con.execute("SELECT * FROM read_parquet('/nonexistent/path/data.parquet')").df()
@@ -307,7 +304,7 @@ class TestFeature7Boundaries:
     def test_bva7_ast_disallowed_os_system_import_blocked(self):
         malicious_code = "import os\nos.system('rm -rf /')"
         tree = ast.parse(malicious_code)
-        
+
         forbidden_modules = {"os", "sys", "subprocess", "shutil", "socket", "requests", "http"}
         violations = []
         for node in ast.walk(tree):
@@ -320,8 +317,12 @@ class TestFeature7Boundaries:
     def test_bva7_ast_disallowed_builtin_eval_exec_blocked(self):
         malicious_code = "eval('__import__(\"os\").getcwd()')"
         tree = ast.parse(malicious_code)
-        
-        calls = [node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+
+        calls = [
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        ]
         assert "eval" in calls
 
     def test_bva7_ast_disallowed_dunder_globals_attribute_blocked(self):
@@ -359,13 +360,13 @@ class TestFeature8Boundaries:
         dense_ranks = {"A": 1, "B": 2}
         sparse_ranks = {"C": 1, "D": 2}
         all_docs = set(dense_ranks.keys()) | set(sparse_ranks.keys())
-        
+
         fused = {}
         for d in all_docs:
             d_rank = dense_ranks.get(d, 999)
             s_rank = sparse_ranks.get(d, 999)
             fused[d] = (1.0 / (60 + d_rank)) + (1.0 / (60 + s_rank))
-            
+
         assert len(fused) == 4
         assert all(score > 0 for score in fused.values())
 
@@ -397,7 +398,7 @@ class TestFeature9Boundaries:
         results = {
             "dedicated_db": {"status": "success", "rows": 4},
             "duckdb": {"status": "success", "rows": 4},
-            "pandas_sandbox": {"status": "error", "error": "TimeoutExpired"}
+            "pandas_sandbox": {"status": "error", "error": "TimeoutExpired"},
         }
         successful_engines = [k for k, v in results.items() if v["status"] == "success"]
         assert len(successful_engines) == 2
@@ -477,6 +478,7 @@ class TestFeature11Boundaries:
     def test_bva11_synthesizer_malformed_html_markdown_escaping(self):
         raw_text = "<script>alert('xss')</script> & <b>Bold</b>"
         import html
+
         escaped = html.escape(raw_text)
         assert "<script>" not in escaped
         assert "&lt;script&gt;" in escaped
@@ -522,7 +524,7 @@ class TestFeature12Boundaries:
         parent_end = 250.0
         child_start = 120.0
         child_end = 180.0
-        
+
         parent_duration = parent_end - parent_start
         child_duration = child_end - child_start
         assert child_duration <= parent_duration
@@ -577,7 +579,7 @@ class TestFeature14Boundaries:
     def test_bva14_equivalence_column_order_independent_comparison(self):
         df1 = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
         df2 = pd.DataFrame({"b": [3, 4], "a": [1, 2]})
-        
+
         # Sort columns before comparison
         pd.testing.assert_frame_equal(df1.sort_index(axis=1), df2.sort_index(axis=1))
 
@@ -600,7 +602,7 @@ class TestFeature14Boundaries:
     def test_bva14_equivalence_case_insensitive_column_header_matching(self):
         df1 = pd.DataFrame({"Region": ["North"], "Amount": [100]})
         df2 = pd.DataFrame({"region": ["North"], "amount": [100]})
-        
+
         df1.columns = [c.lower() for c in df1.columns]
         df2.columns = [c.lower() for c in df2.columns]
         pd.testing.assert_frame_equal(df1, df2)
@@ -613,12 +615,7 @@ class TestFeature15Boundaries:
     """Configuration parsing, CORS, HTTP methods, and payload validation boundaries."""
 
     def test_bva15_config_missing_env_vars_fallback_to_defaults(self):
-        defaults = {
-            "HOST": "0.0.0.0",
-            "PORT": 8000,
-            "LOG_LEVEL": "info",
-            "MAX_UPLOAD_SIZE_MB": 50
-        }
+        defaults = {"HOST": "0.0.0.0", "PORT": 8000, "LOG_LEVEL": "info", "MAX_UPLOAD_SIZE_MB": 50}
         assert defaults["PORT"] == 8000
         assert defaults["MAX_UPLOAD_SIZE_MB"] == 50
 
@@ -631,7 +628,7 @@ class TestFeature15Boundaries:
         cors_headers = {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "POST, GET, OPTIONS, DELETE",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
         }
         assert cors_headers["Access-Control-Allow-Origin"] == "*"
 

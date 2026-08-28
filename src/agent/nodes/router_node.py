@@ -34,19 +34,25 @@ def supervisor_router_node(state: AgentState) -> Dict[str, Any]:
         prompt_tokens = max(10, len(query.split()) + 35)
         completion_tokens = 25
         span.record_tokens(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
-        span.end(output_data=decision.model_dump() if hasattr(decision, "model_dump") else str(decision))
+        span.end(
+            output_data=decision.model_dump() if hasattr(decision, "model_dump") else str(decision)
+        )
 
         telemetry = state.get("telemetry", {}) or {}
-        telemetry.update({
-            "trace_id": trace.trace_id,
-            "route": decision.intent,
-            "strategy_used": decision.suggested_strategy,
-            "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
-            "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
-            "total_tokens": telemetry.get("total_tokens", 0) + prompt_tokens + completion_tokens,
-            "latency_ms": round(trace.latency_ms, 2),
-            "execution_success": True,
-        })
+        telemetry.update(
+            {
+                "trace_id": trace.trace_id,
+                "route": decision.intent,
+                "strategy_used": decision.suggested_strategy,
+                "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
+                "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
+                "total_tokens": telemetry.get("total_tokens", 0)
+                + prompt_tokens
+                + completion_tokens,
+                "latency_ms": round(trace.latency_ms, 2),
+                "execution_success": True,
+            }
+        )
 
         return {
             "intent": decision.intent,

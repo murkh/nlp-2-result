@@ -3,8 +3,8 @@ Conversational Multi-Agent Supervisor Q&A API Route.
 Provides the POST /query/agent endpoint executing the LangGraph multi-agent workflow.
 """
 
-from typing import Any, Dict, Optional
 import uuid
+from typing import Any, Dict, Optional
 
 from src.agent.graph import run_agent
 from src.api.schemas import (
@@ -20,6 +20,7 @@ from src.api.schemas import (
 try:
     from fastapi import APIRouter
 except ImportError:
+
     class APIRouter:
         def __init__(self, *args, **kwargs):
             self.routes = []
@@ -28,12 +29,14 @@ except ImportError:
             def decorator(func):
                 self.routes.append(("POST", path, func))
                 return func
+
             return decorator
 
         def get(self, path, *args, **kwargs):
             def decorator(func):
                 self.routes.append(("GET", path, func))
                 return func
+
             return decorator
 
 
@@ -85,7 +88,8 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
             step_number=1,
             title="Supervisor Intent Classification",
             choice=f"Intent: {intent} ({confidence:.0%})",
-            reasoning=routing_reason or "Classified user query based on semantic patterns and metadata catalog.",
+            reasoning=routing_reason
+            or "Classified user query based on semantic patterns and metadata catalog.",
             details={"intent": intent, "confidence": confidence},
         )
     ]
@@ -100,7 +104,9 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
             )
         )
     elif intent == "AMBIGUOUS_QUERY":
-        cand_str = ", ".join(candidate_datasets) if candidate_datasets else "Available knowledge datasets"
+        cand_str = (
+            ", ".join(candidate_datasets) if candidate_datasets else "Available knowledge datasets"
+        )
         steps.append(
             DecisionStep(
                 step_number=2,
@@ -111,7 +117,15 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
             )
         )
     elif intent == "STRUCTURED_QUERY":
-        strat_name = "DuckDB (Strategy B)" if suggested_strategy == "duckdb" else ("PostgreSQL (Strategy A)" if suggested_strategy == "dedicated_db" else "Pandas Sandbox (Strategy C)")
+        strat_name = (
+            "DuckDB (Strategy B)"
+            if suggested_strategy == "duckdb"
+            else (
+                "PostgreSQL (Strategy A)"
+                if suggested_strategy == "dedicated_db"
+                else "Pandas Sandbox (Strategy C)"
+            )
+        )
         steps.append(
             DecisionStep(
                 step_number=2,

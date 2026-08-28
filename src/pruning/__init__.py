@@ -1,4 +1,5 @@
 """Two-Stage Vector Schema Pruner Module."""
+
 from src.pruning.schema_pruner import (
     PrunedColumn,
     PrunedSchemaContext,

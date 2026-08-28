@@ -21,10 +21,16 @@ def clarify_node(state: AgentState) -> Dict[str, Any]:
     tracer = get_tracer()
 
     with tracer.start_trace(name="clarify_node", session_id=session_id) as trace:
-        span = trace.start_span("formulate_clarification", input_data={"query": query, "candidates": candidates})
+        span = trace.start_span(
+            "formulate_clarification", input_data={"query": query, "candidates": candidates}
+        )
 
         if not clarification_msg:
-            cand_str = ", ".join(candidates) if candidates else "orders, sales, customer tables, and company policy documents"
+            cand_str = (
+                ", ".join(candidates)
+                if candidates
+                else "orders, sales, customer tables, and company policy documents"
+            )
             clarification_msg = (
                 f"Your query '{query}' is broad. To provide an accurate answer, could you clarify your goal?\n\n"
                 f"**Available Datasets & Topics**:\n"
@@ -39,16 +45,20 @@ def clarify_node(state: AgentState) -> Dict[str, Any]:
         span.end(output_data={"clarification": clarification_msg})
 
         telemetry = state.get("telemetry", {}) or {}
-        telemetry.update({
-            "trace_id": trace.trace_id,
-            "route": "AMBIGUOUS_QUERY",
-            "strategy_used": None,
-            "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
-            "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
-            "total_tokens": telemetry.get("total_tokens", 0) + prompt_tokens + completion_tokens,
-            "latency_ms": round(trace.latency_ms, 2),
-            "execution_success": True,
-        })
+        telemetry.update(
+            {
+                "trace_id": trace.trace_id,
+                "route": "AMBIGUOUS_QUERY",
+                "strategy_used": None,
+                "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
+                "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
+                "total_tokens": telemetry.get("total_tokens", 0)
+                + prompt_tokens
+                + completion_tokens,
+                "latency_ms": round(trace.latency_ms, 2),
+                "execution_success": True,
+            }
+        )
 
         return {
             "clarification_message": clarification_msg,

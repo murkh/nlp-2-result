@@ -7,39 +7,43 @@ Provides:
 """
 
 from src.evaluation.ragas_suite import (
-    RagasEvaluator,
-    RagasEvaluationResult,
-    RagasMetric,
-    Faithfulness,
     AnswerRelevancy,
     ContextPrecision,
     ContextRecall,
-    faithfulness,
+    Faithfulness,
+    RagasEvaluationResult,
+    RagasEvaluator,
+    RagasMetric,
     answer_relevancy,
-    context_precision,
-    context_recall,
-    calculate_faithfulness,
     calculate_answer_relevancy,
     calculate_context_precision,
     calculate_context_recall,
+    calculate_faithfulness,
+    context_precision,
+    context_recall,
+    faithfulness,
 )
 from src.evaluation.structured_equivalence import (
-    StructuredEquivalenceEvaluator,
-    StructuredBenchmarkResult,
     StructuredBenchmarkRecord,
-    normalize_dataframe,
-    check_execution_equivalence,
+    StructuredBenchmarkResult,
+    StructuredEquivalenceEvaluator,
     assert_frame_equivalence,
-    calculate_syntax_first_pass_rate,
     calculate_equivalence_rate,
+    calculate_syntax_first_pass_rate,
+    check_execution_equivalence,
     compute_latency_statistics,
     estimate_token_cost,
+    normalize_dataframe,
 )
+
+
 def __getattr__(name: str):
     if name in ("EvaluationRunner", "run_eval_cli", "format_evaluation_tables"):
-        from src.evaluation.runner import EvaluationRunner, run_eval_cli, format_evaluation_tables
+        from src.evaluation.runner import EvaluationRunner, format_evaluation_tables, run_eval_cli
+
         return locals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Ragas Suite

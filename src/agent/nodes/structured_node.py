@@ -30,7 +30,9 @@ def structured_node(state: AgentState) -> Dict[str, Any]:
     tracer = get_tracer()
 
     with tracer.start_trace(name=f"structured_agent_{strategy}", session_id=session_id) as trace:
-        span = trace.start_span("execute_structured_engine", input_data={"query": query, "strategy": strategy})
+        span = trace.start_span(
+            "execute_structured_engine", input_data={"query": query, "strategy": strategy}
+        )
 
         generated_code = ""
         execution_result = []
@@ -86,17 +88,21 @@ def structured_node(state: AgentState) -> Dict[str, Any]:
             span.end(status="ERROR", error=execution_error)
 
         telemetry = state.get("telemetry", {}) or {}
-        telemetry.update({
-            "trace_id": trace.trace_id,
-            "route": "STRUCTURED_QUERY",
-            "strategy_used": strategy,
-            "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
-            "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
-            "total_tokens": telemetry.get("total_tokens", 0) + prompt_tokens + completion_tokens,
-            "latency_ms": round(trace.latency_ms, 2),
-            "execution_success": execution_error is None,
-            "error": execution_error,
-        })
+        telemetry.update(
+            {
+                "trace_id": trace.trace_id,
+                "route": "STRUCTURED_QUERY",
+                "strategy_used": strategy,
+                "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
+                "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
+                "total_tokens": telemetry.get("total_tokens", 0)
+                + prompt_tokens
+                + completion_tokens,
+                "latency_ms": round(trace.latency_ms, 2),
+                "execution_success": execution_error is None,
+                "error": execution_error,
+            }
+        )
 
         return {
             "suggested_strategy": strategy,

@@ -16,6 +16,7 @@ try:
     from fastapi import FastAPI, status
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
+
     _has_fastapi = True
 except ImportError:
     _has_fastapi = False
@@ -37,6 +38,7 @@ async def lifespan(app: Any):
     try:
         if len(db_mgr.list_datasets()) == 0:
             from scripts.seed_data import seed_all_datasets
+
             seed_all_datasets()
     except Exception as e:
         print(f"[Lifespan] Auto-seeding notice: {e}")
@@ -52,10 +54,13 @@ def create_app() -> Any:
             def __init__(self):
                 self.title = "Multi-Agent Knowledge Base Q&A Platform"
                 self.version = "0.1.0"
+
             def get(self, *args, **kwargs):
                 return lambda f: f
+
             def post(self, *args, **kwargs):
                 return lambda f: f
+
         return SimpleApp()
 
     app = FastAPI(
@@ -109,4 +114,5 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)

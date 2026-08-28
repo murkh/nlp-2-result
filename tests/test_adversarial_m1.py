@@ -4,14 +4,18 @@ Empirical challenge harness testing extreme inputs, malformed data, large scale 
 complex multi-hop FK chains, ambiguous queries, and edge cases.
 """
 
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 
 from src.database.connection import DatabaseManager
 from src.ingestion.metadata_extractor import EmbeddingService, MetadataExtractor
-from src.ingestion.structured import StructuredIngestionEngine, sanitize_identifier, sanitize_table_name
+from src.ingestion.structured import (
+    StructuredIngestionEngine,
+    sanitize_identifier,
+    sanitize_table_name,
+)
 from src.ingestion.unstructured import RecursiveCharacterChunker, UnstructuredIngestionEngine
 from src.pruning.schema_pruner import TwoStageSchemaPruner, estimate_token_count
 from src.storage.blob_store import BlobStorageManager
@@ -42,11 +46,36 @@ class TestAdversarialMilestone1(unittest.TestCase):
     def test_adversarial_ambiguous_queries(self):
         """Stress-test Stage 1 & 2 pruner with ambiguous queries and overlapping table semantics."""
         tables_to_ingest = [
-            ("sales_2023.csv", "id,product_id,amount,region\n1,101,500,North\n2,102,750,South\n", "Sales 2023", "Historical sales data for 2023 financial year"),
-            ("sales_2024.csv", "id,product_id,amount,region\n1,101,600,North\n2,103,900,East\n", "Sales 2024", "Current sales data for 2024 financial year"),
-            ("sales_targets.csv", "id,rep_id,target_amount,quarter\n1,201,10000,Q1\n2,202,15000,Q2\n", "Sales Targets", "Quarterly quota and sales targets for representatives"),
-            ("customer_sales.csv", "id,customer_id,total_spend\n1,301,1250\n2,302,3400\n", "Customer Sales", "Aggregated customer lifetime purchase value and sales summary"),
-            ("products.csv", "product_id,name,category,price\n101,Widget A,Gadgets,50\n102,Widget B,Gadgets,75\n", "Products Catalog", "Master product listings, names, categories, and retail prices"),
+            (
+                "sales_2023.csv",
+                "id,product_id,amount,region\n1,101,500,North\n2,102,750,South\n",
+                "Sales 2023",
+                "Historical sales data for 2023 financial year",
+            ),
+            (
+                "sales_2024.csv",
+                "id,product_id,amount,region\n1,101,600,North\n2,103,900,East\n",
+                "Sales 2024",
+                "Current sales data for 2024 financial year",
+            ),
+            (
+                "sales_targets.csv",
+                "id,rep_id,target_amount,quarter\n1,201,10000,Q1\n2,202,15000,Q2\n",
+                "Sales Targets",
+                "Quarterly quota and sales targets for representatives",
+            ),
+            (
+                "customer_sales.csv",
+                "id,customer_id,total_spend\n1,301,1250\n2,302,3400\n",
+                "Customer Sales",
+                "Aggregated customer lifetime purchase value and sales summary",
+            ),
+            (
+                "products.csv",
+                "product_id,name,category,price\n101,Widget A,Gadgets,50\n102,Widget B,Gadgets,75\n",
+                "Products Catalog",
+                "Master product listings, names, categories, and retail prices",
+            ),
         ]
 
         for fname, csv_data, dname, desc in tables_to_ingest:
@@ -87,7 +116,11 @@ class TestAdversarialMilestone1(unittest.TestCase):
             cols = [f"t{i}_col_{j}" for j in range(cols_per_table)]
             header = f"id,t{i}_code," + ",".join(cols) + "\n"
             row1 = f"{i+1},CODE_{i}," + ",".join([str(j * 5) for j in range(cols_per_table)]) + "\n"
-            row2 = f"{i+100},CODE_{i}," + ",".join([str((j + 1) * 7) for j in range(cols_per_table)]) + "\n"
+            row2 = (
+                f"{i+100},CODE_{i},"
+                + ",".join([str((j + 1) * 7) for j in range(cols_per_table)])
+                + "\n"
+            )
             csv_content = header + row1 + row2
 
             self.structured_engine.ingest_file(
@@ -117,7 +150,9 @@ class TestAdversarialMilestone1(unittest.TestCase):
         self.assertIn("Read-only queries only", pruned_ctx.ddl_prompt_snippet)
 
         # Verify token reduction > 85%
-        print(f"\n[Adversarial 55-Table Benchmark] Pruned={pruned_ctx.token_count_pruned} tokens, Full={pruned_ctx.token_count_full} tokens, Savings={pruned_ctx.token_savings_percent}%")
+        print(
+            f"\n[Adversarial 55-Table Benchmark] Pruned={pruned_ctx.token_count_pruned} tokens, Full={pruned_ctx.token_count_full} tokens, Savings={pruned_ctx.token_savings_percent}%"
+        )
         self.assertGreater(pruned_ctx.token_savings_percent, 85.0)
         self.assertLess(pruned_ctx.token_count_pruned, 600)
         self.assertGreater(pruned_ctx.token_count_full, 4000)
@@ -231,7 +266,7 @@ class TestAdversarialMilestone1(unittest.TestCase):
         special characters, symbols, quotes, and digit prefixes as column names.
         """
         special_headers = (
-            'select,from,where,order,group,table,user,limit,join,case,default,check,'
+            "select,from,where,order,group,table,user,limit,join,case,default,check,"
             '"Column With Spaces","Total ($ USD)","Order # / Ref @","col.with.dots",'
             '"!@#$%^&*()",123_starts_with_digit,""\n'
         )
@@ -292,10 +327,10 @@ class TestAdversarialMilestone1(unittest.TestCase):
         csv_text = (
             "col_a,col_b,col_c,col_d\n"
             "1,2,3,4\n"
-            "5,6\n"                     # Short row (needs padding with None)
-            "7,8,9,10,11,12,13\n"       # Long row (needs truncation to 4 cols)
-            "   \n"                     # Empty whitespace line (should be skipped)
-            "\n"                        # Blank line (should be skipped)
+            "5,6\n"  # Short row (needs padding with None)
+            "7,8,9,10,11,12,13\n"  # Long row (needs truncation to 4 cols)
+            "   \n"  # Empty whitespace line (should be skipped)
+            "\n"  # Blank line (should be skipped)
             "14,15,16,17\n"
         )
         dataset = self.structured_engine.ingest_file(
@@ -321,8 +356,8 @@ class TestAdversarialMilestone1(unittest.TestCase):
         csv_text = (
             "id,null_col_1,null_col_2,mixed_col,bool_col,float_col\n"
             '1,"",NULL,100,true,12.34\n'
-            '2,NaN,None,hello,false,56.78\n'
-            '3,NA,,3.1415,t,90.12\n'
+            "2,NaN,None,hello,false,56.78\n"
+            "3,NA,,3.1415,t,90.12\n"
             '4,null,nan,{"key": "value"},f,0.00\n'
         )
         dataset = self.structured_engine.ingest_file(
@@ -371,7 +406,7 @@ class TestAdversarialMilestone1(unittest.TestCase):
     def test_csv_embedded_newlines_and_escaped_quotes(self):
         """Verify CSV parser correctly handles multi-line cell values and complex escaped quotes."""
         csv_text = (
-            'id,title,description,amount\n'
+            "id,title,description,amount\n"
             '1,"Item One","First line of desc\nSecond line of desc\nThird line of desc",19.99\n'
             '2,"Item Two","Contains ""double quotes"" and commas, semicolons;",49.50\n'
         )
@@ -428,7 +463,9 @@ class TestAdversarialMilestone1(unittest.TestCase):
                 * 8
                 for k in range(5)
             ]
-            chapter_text = f"# Chapter {i+1}: Advanced Systems Engineering {i+1}\n\n" + "\n\n".join(body_paragraphs)
+            chapter_text = f"# Chapter {i+1}: Advanced Systems Engineering {i+1}\n\n" + "\n\n".join(
+                body_paragraphs
+            )
             chapters.append(chapter_text)
 
         large_doc_text = "\n\n---\n\n".join(chapters)
@@ -451,7 +488,10 @@ class TestAdversarialMilestone1(unittest.TestCase):
 
         self.assertGreater(len(results), 0)
         found_target = any("UNIQUE_TARGET_TOKEN_14_3" in r["content"] for r in results)
-        self.assertTrue(found_target, "Target token UNIQUE_TARGET_TOKEN_14_3 not found in top hybrid search results")
+        self.assertTrue(
+            found_target,
+            "Target token UNIQUE_TARGET_TOKEN_14_3 not found in top hybrid search results",
+        )
         self.assertGreater(results[0]["rrf_score"], 0.0)
 
     def test_unstructured_extreme_unbroken_text_and_unicode(self):

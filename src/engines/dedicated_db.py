@@ -25,7 +25,6 @@ from src.database.models import QueryLog
 from src.pruning.schema_pruner import PrunedSchemaContext, TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
 
-
 FORBIDDEN_SQL_PATTERNS = [
     r"\b(DROP|DELETE|UPDATE|INSERT|ALTER|CREATE|TRUNCATE|GRANT|REVOKE)\b",
     r"\b(ATTACH|DETACH|VACUUM|REINDEX|COPY|IMPORT|EXPORT)\b",
@@ -90,6 +89,7 @@ class DedicatedDBEngine:
         if self.settings.openai_api_key:
             try:
                 from openai import OpenAI
+
                 self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
             except Exception:
                 self._openai_client = None
@@ -131,8 +131,12 @@ class DedicatedDBEngine:
                 answer=f"Execution blocked: {sec_err}",
                 sql_query=sql_query,
                 tabular_result=TabularResult(columns=[], rows=[], row_count=0),
-                metrics=ExecutionMetrics(query_generation_ms=gen_latency_ms, total_latency_ms=total_lat),
-                token_usage=TokenUsage(prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]),
+                metrics=ExecutionMetrics(
+                    query_generation_ms=gen_latency_ms, total_latency_ms=total_lat
+                ),
+                token_usage=TokenUsage(
+                    prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]
+                ),
                 error=sec_err,
             )
 
@@ -155,7 +159,9 @@ class DedicatedDBEngine:
                     engine_execution_ms=exec_latency_ms,
                     total_latency_ms=total_lat,
                 ),
-                token_usage=TokenUsage(prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]),
+                token_usage=TokenUsage(
+                    prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]
+                ),
                 error=exec_err,
             )
 
@@ -203,13 +209,18 @@ class DedicatedDBEngine:
         )
 
         # Construct Thinking Process with dynamic LLM thoughts
-        selected_tbls = ", ".join(pruned_context.table_names) if pruned_context.table_names else "None"
+        selected_tbls = (
+            ", ".join(pruned_context.table_names) if pruned_context.table_names else "None"
+        )
         retained_summary = ", ".join(
             f"{t}: [{', '.join(cols[:4])}{'...' if len(cols) > 4 else ''}]"
             for t, cols in pruned_context.retained_columns.items()
         )
         pruning_reason = f"Vector search selected {len(pruned_context.table_names)} table(s). Retained schema: {retained_summary}."
-        sql_reason = llm_thought or f"Formulated PostgreSQL query for '{query_text}' against table(s) [{selected_tbls}]."
+        sql_reason = (
+            llm_thought
+            or f"Formulated PostgreSQL query for '{query_text}' against table(s) [{selected_tbls}]."
+        )
 
         thinking = ThinkingProcess(
             summary=f"Strategy A executed PostgreSQL Text2SQL against table(s) [{selected_tbls}] and returned {len(dict_rows)} row(s).",
@@ -254,7 +265,9 @@ class DedicatedDBEngine:
             token_usage=token_usage,
         )
 
-    def _run_query_safe(self, sql_query: str) -> Tuple[List[str], List[Tuple[Any, ...]], Optional[str]]:
+    def _run_query_safe(
+        self, sql_query: str
+    ) -> Tuple[List[str], List[Tuple[Any, ...]], Optional[str]]:
         """Execute query wrapped in read-only block."""
         try:
             cols, rows = self.db_manager.execute_sql_query(sql_query)
@@ -262,7 +275,9 @@ class DedicatedDBEngine:
         except Exception as e:
             return [], [], str(e)
 
-    def _generate_sql(self, query: str, context: PrunedSchemaContext) -> Tuple[str, Optional[str], Tuple[int, int]]:
+    def _generate_sql(
+        self, query: str, context: PrunedSchemaContext
+    ) -> Tuple[str, Optional[str], Tuple[int, int]]:
         """Generate PostgreSQL SQL query using LLM or rule-based generator."""
         prompt = (
             f"You are an expert PostgreSQL data analyst. Write a valid read-only PostgreSQL query.\n"
@@ -283,7 +298,7 @@ class DedicatedDBEngine:
                     temperature=0.0,
                 )
                 raw_text = resp.choices[0].message.content or ""
-                
+
                 thought = None
                 sql = None
                 blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
@@ -298,7 +313,9 @@ class DedicatedDBEngine:
                     sql_match = re.search(r"```(?:sql)?(.*?)```", raw_text, re.DOTALL)
                     sql = sql_match.group(1).strip() if sql_match else raw_text.strip()
 
-                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                comp_tokens = (
+                    resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                )
                 return sql, thought, (prompt_tokens, comp_tokens)
             except Exception:
                 pass
@@ -326,9 +343,21 @@ class DedicatedDBEngine:
             return f'SELECT COUNT(*) AS total_records FROM "{primary_table}";'
 
         # Check for sum / average query
-        amount_col = next((c for c in retained_cols if "amount" in c.lower() or "price" in c.lower() or "total" in c.lower() or "sales" in c.lower()), None)
+        amount_col = next(
+            (
+                c
+                for c in retained_cols
+                if "amount" in c.lower()
+                or "price" in c.lower()
+                or "total" in c.lower()
+                or "sales" in c.lower()
+            ),
+            None,
+        )
         if ("sum" in lower_q or "total sales" in lower_q or "revenue" in lower_q) and amount_col:
-            city_col = next((c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None)
+            city_col = next(
+                (c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None
+            )
             if city_col and ("by city" in lower_q or "per city" in lower_q or "top" in lower_q):
                 return f'SELECT "{city_col}", SUM("{amount_col}") AS total_revenue FROM "{primary_table}" GROUP BY "{city_col}" ORDER BY total_revenue DESC LIMIT 20;'
             return f'SELECT SUM("{amount_col}") AS total_revenue FROM "{primary_table}";'
@@ -362,7 +391,9 @@ class DedicatedDBEngine:
                 val_str = f"{val:,.2f}"
             else:
                 val_str = str(val)
-            ans = f"Based on the database records, the {col_name.replace('_', ' ')} is **{val_str}**."
+            ans = (
+                f"Based on the database records, the {col_name.replace('_', ' ')} is **{val_str}**."
+            )
             return ans, (30, 15)
 
         # Multi-row tabular summary

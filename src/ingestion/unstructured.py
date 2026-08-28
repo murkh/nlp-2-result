@@ -4,13 +4,13 @@ Saves raw files to Blob Storage, performs recursive chunking (800 chars / 150 ov
 computes dense vector embeddings, and enables hybrid RRF search.
 """
 
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
 import uuid
 import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import Dataset, DocumentChunk
@@ -21,6 +21,7 @@ from src.storage.blob_store import BlobStorageManager, get_blob_manager
 @dataclass
 class ParsedSection:
     """A extracted section of text from an unstructured document."""
+
     content: str
     page_number: Optional[int] = None
     section_title: Optional[str] = None
@@ -118,9 +119,7 @@ class UnstructuredIngestionEngine:
         self.db_manager = db_manager or get_db_manager()
         self.blob_manager = blob_manager or get_blob_manager()
         self.embedding_service = embedding_service or EmbeddingService()
-        self.chunker = RecursiveCharacterChunker(
-            chunk_size=chunk_size, chunk_overlap=chunk_overlap
-        )
+        self.chunker = RecursiveCharacterChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
     def ingest_file(
         self,
@@ -189,7 +188,10 @@ class UnstructuredIngestionEngine:
         # 6. Record dataset in registry
         base_name = Path(filename).stem
         human_name = display_name or base_name.replace("_", " ").title()
-        dataset_description = description or f"Unstructured document {filename} containing {len(chunks_to_embed)} chunks across {total_pages or 1} pages."
+        dataset_description = (
+            description
+            or f"Unstructured document {filename} containing {len(chunks_to_embed)} chunks across {total_pages or 1} pages."
+        )
 
         dataset_record = Dataset(
             id=d_id,
@@ -225,6 +227,7 @@ class UnstructuredIngestionEngine:
         sections: List[ParsedSection] = []
         try:
             from pypdf import PdfReader
+
             reader = PdfReader(str(file_path))
             total_pages = len(reader.pages)
             for page_idx, page in enumerate(reader.pages):
@@ -245,13 +248,16 @@ class UnstructuredIngestionEngine:
             # Extract printable strings
             clean_strings = re.findall(r"\(([\w\s.,!?-]+)\)", raw_data)
             joined = " ".join(clean_strings) if clean_strings else raw_data[:2000]
-            return [ParsedSection(content=joined, page_number=1, section_title="Extracted Document")], 1
+            return [
+                ParsedSection(content=joined, page_number=1, section_title="Extracted Document")
+            ], 1
 
     def _parse_docx(self, file_path: Path) -> Tuple[List[ParsedSection], int]:
         """Extract paragraphs and headers from DOCX."""
         sections: List[ParsedSection] = []
         try:
             import docx
+
             doc = docx.Document(str(file_path))
             current_heading = "Introduction"
             current_paragraphs: List[str] = []

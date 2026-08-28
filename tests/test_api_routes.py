@@ -9,9 +9,9 @@ Tests /health, /ingest, /datasets, and all 5 execution query endpoints:
 """
 
 import asyncio
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from src.api.routes import agent, ingest, query
 from src.api.schemas import (
@@ -74,6 +74,7 @@ class TestAPIRoutes(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_datasets_list_and_get_endpoints(self):
@@ -150,7 +151,9 @@ class TestAPIRoutes(unittest.TestCase):
 
     def test_query_agent_endpoint(self):
         """Verify POST /query/agent conversational endpoint."""
-        req = QueryAgentRequest(query="How many total orders are there?", session_id="test_sess_api")
+        req = QueryAgentRequest(
+            query="How many total orders are there?", session_id="test_sess_api"
+        )
         resp = asyncio.run(agent.query_agent_endpoint(req))
         self.assertIsNone(resp.error)
         self.assertEqual(resp.intent, "STRUCTURED_QUERY")

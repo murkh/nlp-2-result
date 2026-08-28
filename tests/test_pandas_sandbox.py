@@ -4,8 +4,8 @@ Verifies AST security validation against adversarial payloads,
 subprocess timeout isolation, DataFrame result serialization, and response synthesis.
 """
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from src.api.schemas import QueryPandasSandboxRequest
 from src.engines.pandas_sandbox.ast_validator import validate_python_code
@@ -49,6 +49,7 @@ class TestPandasSandboxEngine(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     # -------------------------------------------------------------------------

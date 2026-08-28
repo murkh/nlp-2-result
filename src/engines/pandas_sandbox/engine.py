@@ -5,9 +5,9 @@ isolated subprocess execution, and data-backed response synthesis.
 """
 
 import os
-from pathlib import Path
 import re
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.api.schemas import (
@@ -52,6 +52,7 @@ class PandasSandboxEngine:
         if self.settings.openai_api_key:
             try:
                 from openai import OpenAI
+
                 self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
             except Exception:
                 self._openai_client = None
@@ -95,20 +96,32 @@ class PandasSandboxEngine:
 
         # 2. Generate Python code with LLM thought extraction
         gen_start = time.perf_counter()
-        python_code, llm_thought, gen_tokens = self._generate_python_code(query_text, pruned_context)
+        python_code, llm_thought, gen_tokens = self._generate_python_code(
+            query_text, pruned_context
+        )
         gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
 
         # Fallback: ensure dataset loader is present if code references df without defining it
-        if ("df." in python_code or "df[" in python_code) and "pd.read_" not in python_code and pruned_context.table_names:
+        if (
+            ("df." in python_code or "df[" in python_code)
+            and "pd.read_" not in python_code
+            and pruned_context.table_names
+        ):
             first_tbl = pruned_context.table_names[0]
             first_path = pruned_context.file_paths.get(first_tbl, "")
             if first_path:
                 if first_path.endswith(".parquet"):
-                    python_code = f"import pandas as pd\ndf = pd.read_parquet({first_path!r})\n" + python_code
+                    python_code = (
+                        f"import pandas as pd\ndf = pd.read_parquet({first_path!r})\n" + python_code
+                    )
                 elif first_path.endswith(".xlsx") or first_path.endswith(".xls"):
-                    python_code = f"import pandas as pd\ndf = pd.read_excel({first_path!r})\n" + python_code
+                    python_code = (
+                        f"import pandas as pd\ndf = pd.read_excel({first_path!r})\n" + python_code
+                    )
                 else:
-                    python_code = f"import pandas as pd\ndf = pd.read_csv({first_path!r})\n" + python_code
+                    python_code = (
+                        f"import pandas as pd\ndf = pd.read_csv({first_path!r})\n" + python_code
+                    )
 
         # 3. AST Security validation
         is_safe, err_msg = validate_python_code(python_code)
@@ -127,8 +140,12 @@ class PandasSandboxEngine:
                 python_code=python_code,
                 tabular_result=TabularResult(columns=[], rows=[], row_count=0),
                 security_report=sec_report,
-                metrics=ExecutionMetrics(query_generation_ms=gen_latency_ms, total_latency_ms=total_lat),
-                token_usage=TokenUsage(prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]),
+                metrics=ExecutionMetrics(
+                    query_generation_ms=gen_latency_ms, total_latency_ms=total_lat
+                ),
+                token_usage=TokenUsage(
+                    prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]
+                ),
                 error=err_msg,
             )
 
@@ -165,7 +182,9 @@ class PandasSandboxEngine:
                     engine_execution_ms=exec_latency_ms,
                     total_latency_ms=total_lat,
                 ),
-                token_usage=TokenUsage(prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]),
+                token_usage=TokenUsage(
+                    prompt_tokens=gen_tokens[0], completion_tokens=gen_tokens[1]
+                ),
                 error=stderr_msg,
             )
 
@@ -216,9 +235,18 @@ class PandasSandboxEngine:
         )
 
         # Construct Thinking Process with dynamic LLM thoughts
-        selected_tbls = ", ".join(pruned_context.table_names) if pruned_context.table_names else "None"
-        file_summary = ", ".join(f"{t} ({Path(p).name})" for t, p in pruned_context.file_paths.items()) if pruned_context.file_paths else selected_tbls
-        py_reason = llm_thought or f"Formulated vectorized Pandas DataFrame transformation for '{query_text}' on file(s) [{file_summary}]."
+        selected_tbls = (
+            ", ".join(pruned_context.table_names) if pruned_context.table_names else "None"
+        )
+        file_summary = (
+            ", ".join(f"{t} ({Path(p).name})" for t, p in pruned_context.file_paths.items())
+            if pruned_context.file_paths
+            else selected_tbls
+        )
+        py_reason = (
+            llm_thought
+            or f"Formulated vectorized Pandas DataFrame transformation for '{query_text}' on file(s) [{file_summary}]."
+        )
 
         thinking = ThinkingProcess(
             summary=f"Strategy C generated vectorized Python transformation code, passed AST security validation, and executed in an isolated subprocess sandbox returning {len(rows)} row(s).",
@@ -242,7 +270,11 @@ class PandasSandboxEngine:
                     title="AST Security & Sandbox Verification",
                     choice="Passed AST Whitelist & Subprocess Isolation",
                     reasoning="Static analysis verified code contains no forbidden imports (os, sys, subprocess) or dunder escapes. Subprocess allocated CPU watchdog limits.",
-                    details={"ast_passed": sec_report.ast_passed, "violations": sec_report.violations, "exit_code": sec_report.exit_code},
+                    details={
+                        "ast_passed": sec_report.ast_passed,
+                        "violations": sec_report.violations,
+                        "exit_code": sec_report.exit_code,
+                    },
                 ),
                 DecisionStep(
                     step_number=4,
@@ -292,7 +324,7 @@ class PandasSandboxEngine:
                     temperature=0.0,
                 )
                 raw_text = resp.choices[0].message.content or ""
-                
+
                 thought = None
                 code = None
                 blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
@@ -307,7 +339,9 @@ class PandasSandboxEngine:
                     code_match = re.search(r"```(?:python)?(.*?)```", raw_text, re.DOTALL)
                     code = code_match.group(1).strip() if code_match else raw_text.strip()
 
-                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                comp_tokens = (
+                    resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                )
                 return code, thought, (prompt_tokens, comp_tokens)
             except Exception:
                 pass
@@ -343,35 +377,60 @@ df = pd.read_csv({blob_path!r})
 result = res.sort_values(by='total_count', ascending=False).head(20)
 """
             if "completed" in lower_q and "status" in retained_cols:
-                return loader + """count = len(df[df['status'].astype(str).str.lower() == 'completed'])
+                return (
+                    loader + """count = len(df[df['status'].astype(str).str.lower() == 'completed'])
 result = {'completed_count': count}
 """
+                )
             return loader + """result = {'total_records': len(df)}
 """
 
         # Logic 2: Sum / average queries
-        amount_col = next((c for c in retained_cols if "amount" in c.lower() or "price" in c.lower() or "total" in c.lower() or "sales" in c.lower()), None)
+        amount_col = next(
+            (
+                c
+                for c in retained_cols
+                if "amount" in c.lower()
+                or "price" in c.lower()
+                or "total" in c.lower()
+                or "sales" in c.lower()
+            ),
+            None,
+        )
         if ("sum" in lower_q or "total sales" in lower_q or "revenue" in lower_q) and amount_col:
-            city_col = next((c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None)
+            city_col = next(
+                (c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None
+            )
             if city_col and ("by city" in lower_q or "per city" in lower_q or "top" in lower_q):
-                return loader + f"""df[{amount_col!r}] = pd.to_numeric(df[{amount_col!r}], errors='coerce').fillna(0)
+                return (
+                    loader
+                    + f"""df[{amount_col!r}] = pd.to_numeric(df[{amount_col!r}], errors='coerce').fillna(0)
 res = df.groupby({city_col!r})[{amount_col!r}].sum().reset_index(name='total_revenue')
 result = res.sort_values(by='total_revenue', ascending=False).head(20)
 """
-            return loader + f"""total = float(pd.to_numeric(df[{amount_col!r}], errors='coerce').sum())
+                )
+            return (
+                loader + f"""total = float(pd.to_numeric(df[{amount_col!r}], errors='coerce').sum())
 result = {{'total_revenue': total}}
 """
+            )
 
         if ("average" in lower_q or "avg" in lower_q) and amount_col:
-            return loader + f"""avg_val = float(pd.to_numeric(df[{amount_col!r}], errors='coerce').mean())
+            return (
+                loader
+                + f"""avg_val = float(pd.to_numeric(df[{amount_col!r}], errors='coerce').mean())
 result = {{'average_amount': avg_val}}
 """
+            )
 
         # Logic 3: Top N / highest
         if ("highest" in lower_q or "top" in lower_q or "most expensive" in lower_q) and amount_col:
-            return loader + f"""df[{amount_col!r}] = pd.to_numeric(df[{amount_col!r}], errors='coerce').fillna(0)
+            return (
+                loader
+                + f"""df[{amount_col!r}] = pd.to_numeric(df[{amount_col!r}], errors='coerce').fillna(0)
 result = df.sort_values(by={amount_col!r}, ascending=False).head(20)
 """
+            )
 
         # Default select
         return loader + """result = df.head(20)

@@ -10,7 +10,9 @@ from src.agent.state import AgentState
 from src.observability.telemetry import get_tracer
 
 
-def format_markdown_table(rows: List[Dict[str, Any]], columns: Optional[List[str]] = None, max_rows: int = 20) -> str:
+def format_markdown_table(
+    rows: List[Dict[str, Any]], columns: Optional[List[str]] = None, max_rows: int = 20
+) -> str:
     """Format row dictionaries into a clean GitHub-flavored Markdown table."""
     if not rows:
         return ""
@@ -21,7 +23,7 @@ def format_markdown_table(rows: List[Dict[str, Any]], columns: Optional[List[str
 
     header_line = "| " + " | ".join(str(c) for c in cols) + " |"
     separator_line = "| " + " | ".join("---" for _ in cols) + " |"
-    
+
     table_lines = [header_line, separator_line]
     display_rows = rows[:max_rows]
     for r in display_rows:
@@ -90,18 +92,30 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
 
             # 2. Markdown Table for multi-row or multi-column data
             table_md = ""
-            if execution_result and not (len(execution_result) == 1 and len(execution_result[0]) == 1):
-                table_md = format_markdown_table(execution_result, columns=execution_columns, max_rows=20)
+            if execution_result and not (
+                len(execution_result) == 1 and len(execution_result[0]) == 1
+            ):
+                table_md = format_markdown_table(
+                    execution_result, columns=execution_columns, max_rows=20
+                )
 
             parts = [base_text]
             if table_md:
                 parts.append(table_md)
-            
+
             final_answer = "\n\n".join(parts)
 
             # Ensure citations are recorded
             if not citations:
-                strat_label = "DuckDB (In-Memory)" if strategy == "duckdb" else ("PostgreSQL (Dedicated DB)" if strategy == "dedicated_db" else "Pandas Sandbox")
+                strat_label = (
+                    "DuckDB (In-Memory)"
+                    if strategy == "duckdb"
+                    else (
+                        "PostgreSQL (Dedicated DB)"
+                        if strategy == "dedicated_db"
+                        else "Pandas Sandbox"
+                    )
+                )
                 citations.append(f"[Engine: {strat_label}, Rows: {len(execution_result)}]")
 
         elif intent == "UNSTRUCTURED_QUERY":
@@ -109,10 +123,14 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
                 final_answer = raw_answer.strip()
             elif retrieved_chunks:
                 # Combine top chunk snippets
-                snippets = [f"- {c.get('content', c.get('snippet', ''))}" for c in retrieved_chunks[:3]]
+                snippets = [
+                    f"- {c.get('content', c.get('snippet', ''))}" for c in retrieved_chunks[:3]
+                ]
                 final_answer = f"Based on the relevant documentation:\n\n" + "\n\n".join(snippets)
             else:
-                final_answer = "No matching documentation or knowledge chunks were found for your query."
+                final_answer = (
+                    "No matching documentation or knowledge chunks were found for your query."
+                )
 
             # If citations exist and not embedded in answer, add citation list
             if citations and not any(c in final_answer for c in citations):
@@ -126,18 +144,31 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
         prompt_tokens = max(15, len(query.split()) + len(str(execution_result)[:200].split()))
         completion_tokens = max(20, len(final_answer.split()))
         span.record_tokens(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
-        span.end(output_data={"final_answer_length": len(final_answer), "citations_count": len(citations)})
+        span.end(
+            output_data={
+                "final_answer_length": len(final_answer),
+                "citations_count": len(citations),
+            }
+        )
 
-        telemetry.update({
-            "trace_id": trace.trace_id,
-            "route": intent,
-            "strategy_used": strategy if intent == "STRUCTURED_QUERY" else ("hybrid_rag" if intent == "UNSTRUCTURED_QUERY" else None),
-            "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
-            "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
-            "total_tokens": telemetry.get("total_tokens", 0) + prompt_tokens + completion_tokens,
-            "latency_ms": round(trace.latency_ms, 2),
-            "execution_success": execution_error is None,
-        })
+        telemetry.update(
+            {
+                "trace_id": trace.trace_id,
+                "route": intent,
+                "strategy_used": (
+                    strategy
+                    if intent == "STRUCTURED_QUERY"
+                    else ("hybrid_rag" if intent == "UNSTRUCTURED_QUERY" else None)
+                ),
+                "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
+                "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
+                "total_tokens": telemetry.get("total_tokens", 0)
+                + prompt_tokens
+                + completion_tokens,
+                "latency_ms": round(trace.latency_ms, 2),
+                "execution_success": execution_error is None,
+            }
+        )
 
         return {
             "final_answer": final_answer,

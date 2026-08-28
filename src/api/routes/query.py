@@ -32,6 +32,7 @@ from src.engines.pandas_sandbox.engine import PandasSandboxEngine
 try:
     from fastapi import APIRouter
 except ImportError:
+
     class APIRouter:
         def __init__(self, *args, **kwargs):
             self.routes = []
@@ -40,12 +41,14 @@ except ImportError:
             def decorator(func):
                 self.routes.append(("POST", path, func))
                 return func
+
             return decorator
 
         def get(self, path, *args, **kwargs):
             def decorator(func):
                 self.routes.append(("GET", path, func))
                 return func
+
             return decorator
 
 
@@ -67,14 +70,18 @@ async def query_duckdb_endpoint(request: QueryDuckDBRequest) -> QueryDuckDBRespo
 
 
 @router.post("/pandas-sandbox", response_model=QueryPandasSandboxResponse)
-async def query_pandas_sandbox_endpoint(request: QueryPandasSandboxRequest) -> QueryPandasSandboxResponse:
+async def query_pandas_sandbox_endpoint(
+    request: QueryPandasSandboxRequest,
+) -> QueryPandasSandboxResponse:
     """Strategy C: Sandboxed Python DataFrame execution with AST validation and resource watchdog."""
     engine = PandasSandboxEngine(db_manager=get_db_manager())
     return engine.execute_query(request)
 
 
 @router.post("/unstructured-rag", response_model=QueryUnstructuredRAGResponse)
-async def query_unstructured_rag_endpoint(request: QueryUnstructuredRAGRequest) -> QueryUnstructuredRAGResponse:
+async def query_unstructured_rag_endpoint(
+    request: QueryUnstructuredRAGRequest,
+) -> QueryUnstructuredRAGResponse:
     """Unstructured Hybrid RAG with Reciprocal Rank Fusion (RRF) and bracketed source citations."""
     engine = HybridRAGEngine(db_manager=get_db_manager())
     return engine.execute_query(request)

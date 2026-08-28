@@ -21,14 +21,14 @@ Stress-tests:
    - Cache eviction boundary
 """
 
-from concurrent.futures import ThreadPoolExecutor
 import os
-from pathlib import Path
 import shutil
 import tempfile
 import threading
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from src.agent.graph import route_intent, run_agent
 from src.agent.nodes.chitchat_node import chitchat_node
@@ -143,7 +143,10 @@ class TestMilestone3IntentRouting(unittest.TestCase):
             ("Can you help me filter customers in North region?", "STRUCTURED_QUERY"),
             ("Help me find top products by price", "STRUCTURED_QUERY"),
             ("Can you help me count completed orders?", "STRUCTURED_QUERY"),
-            ("Can you help me understand the security data retention policy?", "UNSTRUCTURED_QUERY"),
+            (
+                "Can you help me understand the security data retention policy?",
+                "UNSTRUCTURED_QUERY",
+            ),
         ]
         for q, expected in queries:
             decision = self.router.classify_intent(q)
@@ -197,7 +200,12 @@ class TestMilestone3IntentRouting(unittest.TestCase):
             decision = self.router.classify_intent(inj)
             self.assertIn(
                 decision.intent,
-                ["GREETING_OR_CHITCHAT", "AMBIGUOUS_QUERY", "STRUCTURED_QUERY", "UNSTRUCTURED_QUERY"],
+                [
+                    "GREETING_OR_CHITCHAT",
+                    "AMBIGUOUS_QUERY",
+                    "STRUCTURED_QUERY",
+                    "UNSTRUCTURED_QUERY",
+                ],
             )
             self.assertGreaterEqual(decision.confidence, 0.0)
             self.assertLessEqual(decision.confidence, 1.0)

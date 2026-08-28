@@ -6,9 +6,9 @@ tabular dataframe converters, and telemetry formatting.
 
 import unittest
 from unittest.mock import MagicMock, patch
-from src.evaluation.compat import pd
 
 from frontend.client import BackendClient
+from src.evaluation.compat import pd
 
 
 class TestBackendClient(unittest.TestCase):
@@ -240,7 +240,6 @@ class TestBackendClient(unittest.TestCase):
         self.assertEqual(self.client.format_latency(1250.0), "1.25 s")
         self.assertEqual(self.client.format_latency(3500.0), "3.50 s")
 
-
     def test_client_retry_mechanism(self):
         """Verify client retries on transient connection failures."""
         mock_response = MagicMock()
@@ -249,6 +248,7 @@ class TestBackendClient(unittest.TestCase):
 
         # Simulate 2 failures then success
         call_count = 0
+
         def fake_get(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -272,6 +272,7 @@ class TestBackendClient(unittest.TestCase):
         # Object with rows attribute
         class MockTabular:
             rows = [{"col1": 10, "col2": 20}]
+
         df_obj = self.client.tabular_result_to_dataframe(MockTabular())
         self.assertFalse(df_obj.empty)
         self.assertEqual(len(df_obj), 1)
@@ -283,7 +284,7 @@ class TestUIHelpers(unittest.TestCase):
     def test_render_model_thinking_execution(self):
         """Verify render_model_thinking executes cleanly with mock Streamlit."""
         from frontend.ui import render_model_thinking
-        
+
         sample_thinking = {
             "summary": "Processed with DuckDB",
             "steps": [
@@ -303,18 +304,20 @@ class TestUIHelpers(unittest.TestCase):
                 },
             ],
         }
-        
-        with patch("streamlit.expander") as mock_expander, \
-             patch("streamlit.markdown") as mock_markdown, \
-             patch("streamlit.info") as mock_info, \
-             patch("streamlit.write") as mock_write, \
-             patch("streamlit.divider") as mock_div:
+
+        with (
+            patch("streamlit.expander") as mock_expander,
+            patch("streamlit.markdown") as mock_markdown,
+            patch("streamlit.info") as mock_info,
+            patch("streamlit.write") as mock_write,
+            patch("streamlit.divider") as mock_div,
+        ):
             mock_expander.return_value.__enter__.return_value = MagicMock()
-            
+
             # Should run without error
             render_model_thinking(sample_thinking, default_expanded=True)
             mock_expander.assert_called_once()
-            
+
             # None / Empty should safely no-op
             render_model_thinking(None)
             render_model_thinking({})

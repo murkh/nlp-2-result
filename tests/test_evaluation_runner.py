@@ -9,18 +9,18 @@ Verifies:
 
 import io
 import json
-from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
+from src.evaluation.ragas_suite import RagasEvaluationResult
 from src.evaluation.runner import (
     EvaluationRunner,
     format_evaluation_tables,
     run_eval_cli,
 )
-from src.evaluation.ragas_suite import RagasEvaluationResult
 from src.evaluation.structured_equivalence import StructuredBenchmarkResult
 
 

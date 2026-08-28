@@ -3,19 +3,20 @@ E2E Test Fixtures for Tiers 1-4 (tests/e2e/)
 Multi-Agent Knowledge Base Q&A Platform
 """
 
-import os
-import sys
 import io
 import json
-import uuid
-import tempfile
-import sqlite3
+import os
 import shutil
+import sqlite3
+import sys
+import tempfile
+import uuid
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Generator
-import pytest
-import pandas as pd
+from typing import Any, Dict, Generator, List, Optional
+
 import numpy as np
+import pandas as pd
+import pytest
 
 
 # -----------------------------------------------------------------------------
@@ -23,7 +24,7 @@ import numpy as np
 # -----------------------------------------------------------------------------
 class MockEmbeddingProvider:
     """Generates deterministic 1536-dimensional float vectors based on text hash."""
-    
+
     @staticmethod
     def embed_text(text: str) -> List[float]:
         seed = sum(ord(c) for c in text) % (2**32)
@@ -54,7 +55,7 @@ class MockEmbeddingProvider:
 # -----------------------------------------------------------------------------
 class MockLLMProvider:
     """Deterministic LLM responses for SQL, Python DataFrame, Intent, and Synthesis."""
-    
+
     @staticmethod
     def classify_intent(query: str) -> Dict[str, Any]:
         q_lower = query.lower().strip()
@@ -63,30 +64,51 @@ class MockLLMProvider:
             return {
                 "intent": "GREETING_OR_CHITCHAT",
                 "suggested_strategy": "direct",
-                "response": "Hello! I am your Multi-Agent Knowledge Base assistant. How can I help you today?"
+                "response": "Hello! I am your Multi-Agent Knowledge Base assistant. How can I help you today?",
             }
-        
-        ambiguous = ["data", "show me stats", "analyze", "report", "insights", "what do you have", "stats", "revenue", "show sales"]
+
+        ambiguous = [
+            "data",
+            "show me stats",
+            "analyze",
+            "report",
+            "insights",
+            "what do you have",
+            "stats",
+            "revenue",
+            "show sales",
+        ]
         if q_lower in ambiguous or len(q_lower.split()) <= 1 or not q_lower:
             return {
                 "intent": "AMBIGUOUS_QUERY",
                 "suggested_strategy": "clarify",
                 "candidate_datasets": ["sales_q3", "customer_churn", "financial_records"],
-                "response": "Your query is ambiguous. Which dataset would you like to analyze? Options: sales_q3, customer_churn, financial_records."
+                "response": "Your query is ambiguous. Which dataset would you like to analyze? Options: sales_q3, customer_churn, financial_records.",
             }
-            
-        unstructured_keywords = ["policy", "document", "contract", "section", "paragraph", "article", "clause", "guidelines", "manual", "handbook"]
+
+        unstructured_keywords = [
+            "policy",
+            "document",
+            "contract",
+            "section",
+            "paragraph",
+            "article",
+            "clause",
+            "guidelines",
+            "manual",
+            "handbook",
+        ]
         if any(w in q_lower for w in unstructured_keywords):
             return {
                 "intent": "UNSTRUCTURED_QUERY",
                 "suggested_strategy": "unstructured_rag",
-                "response": "Executing hybrid dense + sparse RAG search across indexed documents."
+                "response": "Executing hybrid dense + sparse RAG search across indexed documents.",
             }
-            
+
         return {
             "intent": "STRUCTURED_QUERY",
             "suggested_strategy": "dedicated_db",
-            "response": "Executing structured query against dedicated database/DuckDB/sandbox."
+            "response": "Executing structured query against dedicated database/DuckDB/sandbox.",
         }
 
     @staticmethod
@@ -109,17 +131,21 @@ class MockLLMProvider:
         )
 
     @staticmethod
-    def synthesize_answer(query: str, evidence: List[Dict[str, Any]], citations: Optional[List[str]] = None) -> Dict[str, Any]:
+    def synthesize_answer(
+        query: str, evidence: List[Dict[str, Any]], citations: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         return {
             "answer": f"Based on the dataset, total records analyzed: {len(evidence)}. The top region by sales is North.",
             "evidence_table": evidence[:5],
-            "citations": citations if citations is not None else ["[Doc1, Page 2]", "[Doc2, Section 3.1]"],
+            "citations": (
+                citations if citations is not None else ["[Doc1, Page 2]", "[Doc2, Section 3.1]"]
+            ),
             "telemetry": {
                 "prompt_tokens": 340,
                 "completion_tokens": 120,
                 "total_tokens": 460,
-                "latency_ms": 45.2
-            }
+                "latency_ms": 45.2,
+            },
         }
 
 
@@ -128,7 +154,7 @@ class MockLLMProvider:
 # -----------------------------------------------------------------------------
 class InMemoryTestDB:
     """Provides an isolated SQLite database mimicking the Postgres metadata catalog."""
-    
+
     def __init__(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
@@ -256,43 +282,60 @@ def sample_data_dir(tmp_path):
     """Creates synthetic CSV, Parquet, Excel, PDF, TXT, DOCX, and MD test files."""
     data_dir = tmp_path / "test_data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 1. Sample CSV
-    sales_df = pd.DataFrame({
-        "order_id": [101, 102, 103, 104, 105, 106, 107, 108],
-        "customer_id": [1, 2, 1, 3, 2, 4, 5, 3],
-        "region": ["North", "South", "East", "West", "North", "South", "East", "West"],
-        "amount": [250.0, 450.5, 120.0, 980.0, 310.0, 620.0, 150.0, 890.0],
-        "quantity": [2, 5, 1, 10, 3, 6, 2, 8],
-        "order_date": ["2026-01-15", "2026-01-18", "2026-02-01", "2026-02-10", "2026-02-15", "2026-03-01", "2026-03-10", "2026-03-15"]
-    })
+    sales_df = pd.DataFrame(
+        {
+            "order_id": [101, 102, 103, 104, 105, 106, 107, 108],
+            "customer_id": [1, 2, 1, 3, 2, 4, 5, 3],
+            "region": ["North", "South", "East", "West", "North", "South", "East", "West"],
+            "amount": [250.0, 450.5, 120.0, 980.0, 310.0, 620.0, 150.0, 890.0],
+            "quantity": [2, 5, 1, 10, 3, 6, 2, 8],
+            "order_date": [
+                "2026-01-15",
+                "2026-01-18",
+                "2026-02-01",
+                "2026-02-10",
+                "2026-02-15",
+                "2026-03-01",
+                "2026-03-10",
+                "2026-03-15",
+            ],
+        }
+    )
     csv_path = data_dir / "sales_data.csv"
     sales_df.to_csv(csv_path, index=False)
-    
+
     # 2. Sample Parquet
-    customers_df = pd.DataFrame({
-        "customer_id": [1, 2, 3, 4, 5],
-        "name": ["Alice Smith", "Bob Jones", "Charlie Brown", "Diana Prince", "Evan Wright"],
-        "tier": ["Gold", "Silver", "Platinum", "Silver", "Gold"],
-        "signup_year": [2022, 2023, 2021, 2024, 2023],
-        "active": [True, True, False, True, True]
-    })
+    customers_df = pd.DataFrame(
+        {
+            "customer_id": [1, 2, 3, 4, 5],
+            "name": ["Alice Smith", "Bob Jones", "Charlie Brown", "Diana Prince", "Evan Wright"],
+            "tier": ["Gold", "Silver", "Platinum", "Silver", "Gold"],
+            "signup_year": [2022, 2023, 2021, 2024, 2023],
+            "active": [True, True, False, True, True],
+        }
+    )
     parquet_path = data_dir / "customers.parquet"
     customers_df.to_parquet(parquet_path, index=False)
-    
+
     # 3. Sample Excel
     excel_path = data_dir / "inventory.xlsx"
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
-        pd.DataFrame({
-            "product_id": ["P100", "P200", "P300"],
-            "stock": [45, 120, 8],
-            "unit_cost": [12.5, 34.0, 150.0]
-        }).to_excel(writer, sheet_name="Stock", index=False)
-        pd.DataFrame({
-            "product_id": ["P100", "P200", "P300"],
-            "warehouse": ["WH-East", "WH-West", "WH-Central"]
-        }).to_excel(writer, sheet_name="Locations", index=False)
-        
+        pd.DataFrame(
+            {
+                "product_id": ["P100", "P200", "P300"],
+                "stock": [45, 120, 8],
+                "unit_cost": [12.5, 34.0, 150.0],
+            }
+        ).to_excel(writer, sheet_name="Stock", index=False)
+        pd.DataFrame(
+            {
+                "product_id": ["P100", "P200", "P300"],
+                "warehouse": ["WH-East", "WH-West", "WH-Central"],
+            }
+        ).to_excel(writer, sheet_name="Locations", index=False)
+
     # 4. Sample TXT Document
     txt_path = data_dir / "security_policy.txt"
     txt_content = (
@@ -305,7 +348,7 @@ def sample_data_dir(tmp_path):
         "use HNSW indexing with cosine distance.\n"
     )
     txt_path.write_text(txt_content, encoding="utf-8")
-    
+
     # 5. Sample Markdown Document
     md_path = data_dir / "architecture.md"
     md_content = (
@@ -331,7 +374,7 @@ def sample_data_dir(tmp_path):
         "txt": txt_path,
         "md": md_path,
         "sales_df": sales_df,
-        "customers_df": customers_df
+        "customers_df": customers_df,
     }
 
 

@@ -4,12 +4,13 @@ Validates Dockerfile.backend, Dockerfile.frontend, and docker-compose.yml struct
 service definitions, healthchecks, dependencies, ports, and volumes.
 """
 
+import re
 import unittest
 from pathlib import Path
-import re
 
 try:
     import yaml
+
     _has_yaml = True
 except ImportError:
     _has_yaml = False
@@ -37,27 +38,31 @@ class TestDockerConfigurations(unittest.TestCase):
     def test_dockerfile_backend_directives(self):
         """Verify Dockerfile.backend contains valid base image, packages, and healthcheck."""
         content = self.backend_dockerfile.read_text()
-        
+
         # Base image
-        self.assertRegex(content, r"FROM\s+python:3\.11-slim", "Dockerfile.backend should use python:3.11-slim base")
-        
+        self.assertRegex(
+            content,
+            r"FROM\s+python:3\.11-slim",
+            "Dockerfile.backend should use python:3.11-slim base",
+        )
+
         # Workdir
         self.assertIn("WORKDIR /app", content)
-        
+
         # System dependencies
         self.assertIn("libpq-dev", content)
         self.assertIn("curl", content)
-        
+
         # UV package manager
         self.assertIn("uv", content)
-        
+
         # Expose port
         self.assertIn("EXPOSE 8000", content)
-        
+
         # Healthcheck
         self.assertIn("HEALTHCHECK", content)
         self.assertIn("http://localhost:8000/health", content)
-        
+
         # CMD entrypoint
         self.assertIn("uvicorn", content)
         self.assertIn("src.main:app", content)
@@ -75,23 +80,27 @@ class TestDockerConfigurations(unittest.TestCase):
     def test_dockerfile_frontend_directives(self):
         """Verify Dockerfile.frontend contains valid Streamlit base and healthcheck."""
         content = self.frontend_dockerfile.read_text()
-        
+
         # Base image & workdir
-        self.assertRegex(content, r"FROM\s+python:3\.11-slim", "Dockerfile.frontend should use python:3.11-slim base")
+        self.assertRegex(
+            content,
+            r"FROM\s+python:3\.11-slim",
+            "Dockerfile.frontend should use python:3.11-slim base",
+        )
         self.assertIn("WORKDIR /app", content)
-        
+
         # Dependencies
         self.assertIn("streamlit", content)
         self.assertIn("httpx", content)
         self.assertIn("pandas", content)
-        
+
         # Expose port
         self.assertIn("EXPOSE 8501", content)
-        
+
         # Healthcheck
         self.assertIn("HEALTHCHECK", content)
         self.assertIn("8501", content)
-        
+
         # CMD
         self.assertIn("streamlit", content)
         self.assertIn("frontend/ui.py", content)
@@ -169,7 +178,6 @@ class TestDockerConfigurations(unittest.TestCase):
         # Volumes
         self.assertIn("volumes", data)
         self.assertIn("postgres_data", data["volumes"])
-
 
     def test_dockerfile_multi_stage_builds(self):
         """Verify Dockerfile.backend and Dockerfile.frontend define multi-stage builder and runner."""

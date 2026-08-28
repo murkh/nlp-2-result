@@ -4,8 +4,8 @@ Verifies parallel 3-way execution (PostgreSQL, DuckDB, Pandas Sandbox),
 ground-truth execution equivalence verification, and telemetry comparison.
 """
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from src.api.schemas import QueryBenchmarkRequest, TabularResult
 from src.engines.benchmark_arena import (
@@ -52,6 +52,7 @@ class TestBenchmarkArena(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_value_and_tabular_equivalence(self):
