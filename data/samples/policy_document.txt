@@ -1,0 +1,27 @@
+ACME GLOBAL DATA GOVERNANCE AND SECURITY POLICY
+Document Version: 3.2
+Effective Date: January 1, 2024
+Owner: Information Security & Data Governance Committee
+
+1. SCOPE AND APPLICABILITY
+This policy applies to all employees, contractors, consultants, and third-party vendors who access, store, process, or transmit Acme Global information assets, including customer records, financial statements, intellectual property, and internal operational data.
+
+2. DATA CLASSIFICATION TIERS
+All company data must be categorized into one of the following four sensitivity tiers:
+- Tier 1 (Public): Marketing materials, published documentation, public blog posts. No access restrictions.
+- Tier 2 (Internal): General internal communications, org charts, engineering architecture documentation. Accessible to all authenticated employees.
+- Tier 3 (Confidential): Customer PII, sales transaction logs, employee compensation data, proprietary code repositories. Access restricted by Role-Based Access Control (RBAC) and least privilege principles.
+- Tier 4 (Restricted): Production encryption master keys, biometric authentication hashes, bank account routing details, compliance audit trails. Requires multi-party authorization and immutable audit logging.
+
+3. RETENTION AND DISPOSAL SCHEDULES
+- Customer Transaction Records: Retained for 7 calendar years from transaction settlement date in accordance with IRS and SOC-2 guidelines.
+- Application Query Logs and Telemetry: Retained in cold storage for 90 days, after which telemetry data is automatically anonymized or purged.
+- Ephemeral Sandbox Execution Artifacts: Must be purged immediately upon subprocess termination or within a maximum lifetime of 1 hour.
+- Hard Drive and Media Decommissioning: Physical storage media must undergo cryptographic erasure (DoD 5220.22-M 3-pass) followed by certified physical degaussing.
+
+4. ENCRYPTION STANDARDS
+- Data in Transit: TLS 1.3 is enforced across all external and inter-service HTTP endpoints. SSLv3, TLS 1.0, and TLS 1.1 are strictly disabled.
+- Data at Rest: AES-256-GCM encryption is mandatory for all database tables, blob storage partitions, and automated backups.
+
+5. PENALTIES FOR NON-COMPLIANCE
+Failure to adhere to these data protection standards may result in immediate revocation of system access, formal disciplinary action up to termination of employment, and potential civil or criminal liability under GDPR and CCPA regulations.

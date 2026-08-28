@@ -1,0 +1,9 @@
+customer_id,first_name,last_name,email,country,signup_date,total_spent,is_active
+501,Alice,Smith,alice@example.com,USA,2023-01-10,684.99,True
+502,Bob,Jones,bob@example.com,USA,2023-02-14,399.9,True
+503,Charlie,Brown,charlie@example.com,Canada,2023-03-22,1340.0,True
+504,Diana,Prince,diana@example.com,UK,2023-04-05,180.8,False
+505,Evan,Wright,evan@example.com,Germany,2023-05-18,1022.75,True
+506,Fiona,Gallagher,fiona@example.com,USA,2023-06-30,130.0,True
+507,George,Clark,george@example.com,Australia,2023-07-12,890.5,True
+508,Hannah,Abbott,hannah@example.com,USA,2023-08-01,520.0,True

@@ -1,0 +1,93 @@
+[project]
+name = "multiagent-knowledge-qa"
+version = "0.1.0"
+description = "Token-efficient Multi-Agent Knowledge Base Q&A platform supporting structured and unstructured data with three execution strategies and benchmarking."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Engineering Team", email = "engineering@example.com" }
+]
+keywords = ["rag", "multi-agent", "text2sql", "duckdb", "pandas", "pgvector", "langfuse", "ragas"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    # Web & API Framework
+    "fastapi>=0.112.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27.0",
+
+    # Database & Storage
+    "psycopg[binary,pool]>=3.2.0",
+    "asyncpg>=0.29.0",
+    "sqlalchemy>=2.0.30",
+    "pgvector>=0.3.2",
+
+    # Structured Data Processing
+    "duckdb>=1.0.0",
+    "pandas>=2.2.2",
+    "polars>=1.5.0",
+    "pyarrow>=17.0.0",
+    "openpyxl>=3.1.5",
+    "sqlglot>=25.10.0",
+
+    # Unstructured Extraction & Search
+    "pypdf>=4.3.1",
+    "python-docx>=1.1.2",
+    "markdown>=3.6",
+    "rank-bm25>=0.2.2",
+    "fastembed>=0.3.4",
+    "tiktoken>=0.7.0",
+
+    # LLM, Agent & Orchestration
+    "openai>=1.40.0",
+    "langchain-core>=0.2.30",
+    "langgraph>=0.2.0",
+    "langfuse>=2.40.0",
+
+    # Frontend
+    "streamlit>=1.37.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.2",
+    "pytest-asyncio>=0.23.8",
+    "ragas>=0.1.15",
+    "black>=24.8.0",
+    "isort>=5.13.2",
+    "flake8>=7.1.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --import-mode=importlib"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 100

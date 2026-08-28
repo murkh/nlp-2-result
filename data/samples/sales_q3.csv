@@ -1,0 +1,6 @@
+transaction_id,customer_id,product_name,category,quantity,unit_price,discount,sales_amount,region,sales_rep
+TX101,501,Wireless Noise-Canceling Headphones,Electronics,2,124.99,0.0,249.98,North America,Sarah Jenkins
+TX102,502,Ergonomic Mechanical Keyboard,Accessories,1,89.5,0.0,89.5,North America,Michael Chang
+TX103,503,Ultra-Wide 34-Inch Curved Monitor,Electronics,1,450.0,0.0,450.0,Europe,Emma Watson
+TX104,505,Standing Desk Converter Pro,Furniture,2,490.12,0.1,882.22,Europe,Emma Watson
+TX105,507,USB-C Dual 4K Display Dock,Accessories,3,246.83,0.05,703.47,Asia-Pacific,Kenji Sato

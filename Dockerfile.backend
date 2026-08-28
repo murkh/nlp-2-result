@@ -1,0 +1,54 @@
+# Multi-Stage Production Dockerfile for FastAPI Backend
+# Stage 1: Build & Dependency Resolution
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install system build dependencies and PostgreSQL client libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv package manager and create virtual environment
+RUN pip install --no-cache-dir uv && \
+    uv venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy project manifest and install dependencies into virtual environment
+COPY pyproject.toml README.md .
+RUN uv pip install --python /opt/venv/bin/python .
+
+# Stage 2: Minimal Runtime Image
+FROM python:3.11-slim AS runner
+
+WORKDIR /app
+
+# Install runtime PostgreSQL client library and curl for healthchecks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libpq5 \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application source code, scripts, and initial sample data
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+COPY data/samples/ ./data/samples/
+
+# Create persistent storage directories
+RUN mkdir -p /app/data/blob /app/data/db
+
+EXPOSE 8000
+
+# Healthcheck to ensure FastAPI application is responding
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=5s \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

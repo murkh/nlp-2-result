@@ -1,0 +1,21 @@
+order_id,customer_id,order_date,status,total_amount,shipping_city,payment_method,item_count
+1001,501,2024-01-15 10:30:00,completed,249.99,New York,credit_card,3
+1002,502,2024-01-16 14:15:00,completed,89.50,San Francisco,paypal,1
+1003,503,2024-01-17 09:00:00,shipped,450.00,Seattle,credit_card,5
+1004,501,2024-01-18 16:45:00,completed,120.00,New York,apple_pay,2
+1005,504,2024-01-19 11:20:00,cancelled,35.00,Austin,credit_card,1
+1006,505,2024-01-20 13:10:00,completed,980.25,Chicago,bank_transfer,8
+1007,506,2024-01-21 15:30:00,shipped,75.00,Boston,credit_card,1
+1008,502,2024-01-22 17:00:00,completed,310.40,San Francisco,apple_pay,4
+1009,507,2024-01-23 08:45:00,pending,150.00,Denver,paypal,2
+1010,508,2024-01-24 12:00:00,completed,520.00,Miami,credit_card,6
+1011,509,2024-01-25 10:15:00,completed,64.99,Dallas,credit_card,1
+1012,503,2024-01-26 14:50:00,completed,890.00,Seattle,bank_transfer,7
+1013,510,2024-01-27 18:20:00,shipped,199.95,Atlanta,paypal,3
+1014,505,2024-01-28 09:30:00,completed,42.50,Chicago,credit_card,1
+1015,501,2024-01-29 16:00:00,completed,315.00,New York,credit_card,4
+1016,511,2024-01-30 11:45:00,completed,620.00,Portland,apple_pay,5
+1017,504,2024-01-31 13:30:00,shipped,145.80,Austin,credit_card,2
+1018,512,2024-02-01 15:10:00,completed,280.00,San Diego,paypal,3
+1019,506,2024-02-02 10:00:00,pending,55.00,Boston,credit_card,1
+1020,507,2024-02-03 14:20:00,completed,740.50,Denver,bank_transfer,6
