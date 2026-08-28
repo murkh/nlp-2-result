@@ -11,11 +11,13 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.api.schemas import (
+    DecisionStep,
     ExecutionMetrics,
     QueryPandasSandboxRequest,
     QueryPandasSandboxResponse,
     SandboxSecurityReport,
     TabularResult,
+    ThinkingProcess,
     TokenUsage,
 )
 from src.config import Settings, get_settings
@@ -91,30 +93,34 @@ class PandasSandboxEngine:
                 error="No structured datasets found",
             )
 
-        # 2. Generate Python code
+        # 2. Generate Python code with LLM thought extraction
         gen_start = time.perf_counter()
-        python_code, gen_tokens = self._generate_python_code(query_text, pruned_context)
+        python_code, llm_thought, gen_tokens = self._generate_python_code(query_text, pruned_context)
         gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
 
-        # Safety net: If generated code uses df without loading dataset, inject loader
-        if "read_csv" not in python_code and "read_parquet" not in python_code and "read_excel" not in python_code:
-            primary_path = list(pruned_context.file_paths.values())[0]
-            if primary_path.endswith(".parquet") or primary_path.endswith(".pq"):
-                loader_stmt = f"import pandas as pd\ndf = pd.read_parquet({primary_path!r})\n"
-            else:
-                loader_stmt = f"import pandas as pd\ndf = pd.read_csv({primary_path!r})\n"
-            python_code = loader_stmt + python_code
+        # Fallback: ensure dataset loader is present if code references df without defining it
+        if ("df." in python_code or "df[" in python_code) and "pd.read_" not in python_code and pruned_context.table_names:
+            first_tbl = pruned_context.table_names[0]
+            first_path = pruned_context.file_paths.get(first_tbl, "")
+            if first_path:
+                if first_path.endswith(".parquet"):
+                    python_code = f"import pandas as pd\ndf = pd.read_parquet({first_path!r})\n" + python_code
+                elif first_path.endswith(".xlsx") or first_path.endswith(".xls"):
+                    python_code = f"import pandas as pd\ndf = pd.read_excel({first_path!r})\n" + python_code
+                else:
+                    python_code = f"import pandas as pd\ndf = pd.read_csv({first_path!r})\n" + python_code
 
-        # 3. AST Security Validation
-        ast_passed, violations = validate_python_code(python_code)
-        if not ast_passed:
+        # 3. AST Security validation
+        is_safe, err_msg = validate_python_code(python_code)
+        if not is_safe:
             total_lat = (time.perf_counter() - start_time) * 1000.0
             sec_report = SandboxSecurityReport(
                 ast_passed=False,
-                violations=violations,
-                exit_code=1,
+                violations=[err_msg],
+                timeout_occurred=False,
+                memory_limit_exceeded=False,
+                exit_code=-1,
             )
-            err_msg = f"AST Security Check Failed: {'; '.join(violations)}"
             return QueryPandasSandboxResponse(
                 query=query_text,
                 answer=f"Execution blocked by security sandbox: {err_msg}",
@@ -209,31 +215,71 @@ class PandasSandboxEngine:
             )
         )
 
+        # Construct Thinking Process with dynamic LLM thoughts
+        selected_tbls = ", ".join(pruned_context.table_names) if pruned_context.table_names else "None"
+        file_summary = ", ".join(f"{t} ({Path(p).name})" for t, p in pruned_context.file_paths.items()) if pruned_context.file_paths else selected_tbls
+        py_reason = llm_thought or f"Formulated vectorized Pandas DataFrame transformation for '{query_text}' on file(s) [{file_summary}]."
+
+        thinking = ThinkingProcess(
+            summary=f"Strategy C generated vectorized Python transformation code, passed AST security validation, and executed in an isolated subprocess sandbox returning {len(rows)} row(s).",
+            steps=[
+                DecisionStep(
+                    step_number=1,
+                    title="Blob File & Schema Resolution",
+                    choice=f"Resolved blob files for: {selected_tbls}",
+                    reasoning=f"Extracted direct storage paths: {file_summary}.",
+                    details={"file_paths": pruned_context.file_paths},
+                ),
+                DecisionStep(
+                    step_number=2,
+                    title="Vectorized Python Transformation Code Generation",
+                    choice="Generated vectorized Pandas script",
+                    reasoning=py_reason,
+                    details={"code": python_code},
+                ),
+                DecisionStep(
+                    step_number=3,
+                    title="AST Security & Sandbox Verification",
+                    choice="Passed AST Whitelist & Subprocess Isolation",
+                    reasoning="Static analysis verified code contains no forbidden imports (os, sys, subprocess) or dunder escapes. Subprocess allocated CPU watchdog limits.",
+                    details={"ast_passed": sec_report.ast_passed, "violations": sec_report.violations, "exit_code": sec_report.exit_code},
+                ),
+                DecisionStep(
+                    step_number=4,
+                    title="DataFrame Result Extraction & Synthesis",
+                    choice=f"Extracted {len(rows)} row(s) from JSON protocol",
+                    reasoning=f"Parsed standardized sandbox JSON stdout protocol into tabular records and synthesized natural language answer.",
+                ),
+            ],
+        )
+
         return QueryPandasSandboxResponse(
             query=query_text,
             answer=answer,
             python_code=python_code,
             tabular_result=tabular_result,
             security_report=sec_report,
+            thinking_process=thinking,
             metrics=metrics,
             token_usage=token_usage,
         )
 
     def _generate_python_code(
         self, query: str, context: PrunedSchemaContext
-    ) -> Tuple[str, Tuple[int, int]]:
+    ) -> Tuple[str, Optional[str], Tuple[int, int]]:
         """Generate sandboxed Python DataFrame code using LLM or deterministic generator."""
         file_paths_str = "\n".join(f"- {tbl}: {p}" for tbl, p in context.file_paths.items())
         prompt = (
             f"You are an expert Python data engineer. Write clean vectorized Pandas transformation code.\n"
             f"Dataset Files:\n{file_paths_str}\n"
             f"Schema:\n{context.ddl_prompt_snippet}\n"
-            f"Question: {query}\n"
-            f"Rules:\n"
-            f"1. Return ONLY Python code enclosed in ```python ... ```.\n"
-            f"2. You MUST load the dataset file using `pd.read_csv('/exact/path/to/file.csv')` or `pd.read_parquet(...)` using the exact paths given in Dataset Files.\n"
-            f"3. Assign the final DataFrame, Series, or scalar output to a variable named `result`.\n"
-            f"4. Ensure `result = result.head(20)` if returning a DataFrame."
+            f"Question: {query}\n\n"
+            f"Instructions:\n"
+            f"1. In a ```thought block, explain your step-by-step reasoning: how you read the file(s), filter, aggregate, and assign result.\n"
+            f"2. In a ```python block, write ONLY the executable Python script.\n"
+            f"3. You MUST load the dataset file using `pd.read_csv('/exact/path/to/file.csv')` or `pd.read_parquet(...)` using the exact paths given in Dataset Files.\n"
+            f"4. Assign the final DataFrame, Series, or scalar output to a variable named `result`.\n"
+            f"5. Ensure `result = result.head(20)` if returning a DataFrame."
         )
 
         prompt_tokens = max(1, len(prompt) // 4)
@@ -245,18 +291,31 @@ class PandasSandboxEngine:
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.0,
                 )
-                raw_code = resp.choices[0].message.content or ""
-                code_match = re.search(r"```python(.*?)```", raw_code, re.DOTALL)
-                code = code_match.group(1).strip() if code_match else raw_code.strip()
-                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(code) // 4)
-                return code, (prompt_tokens, comp_tokens)
+                raw_text = resp.choices[0].message.content or ""
+                
+                thought = None
+                code = None
+                blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
+                for lang, content in blocks:
+                    lang_clean = lang.lower().strip()
+                    if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
+                        thought = content.strip()
+                    elif lang_clean in ("python", "py"):
+                        code = content.strip()
+
+                if not code:
+                    code_match = re.search(r"```(?:python)?(.*?)```", raw_text, re.DOTALL)
+                    code = code_match.group(1).strip() if code_match else raw_text.strip()
+
+                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                return code, thought, (prompt_tokens, comp_tokens)
             except Exception:
                 pass
 
         # Deterministic Python code generator
         code = self._deterministic_pandas_code(query, context)
         comp_tokens = max(1, len(code) // 4)
-        return code, (prompt_tokens, comp_tokens)
+        return code, None, (prompt_tokens, comp_tokens)
 
     def _deterministic_pandas_code(self, query: str, context: PrunedSchemaContext) -> str:
         """Deterministic Python code generator mapping query intent to Pandas script."""

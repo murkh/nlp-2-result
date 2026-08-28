@@ -11,9 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.api.schemas import (
     Citation,
+    DecisionStep,
     ExecutionMetrics,
     QueryUnstructuredRAGRequest,
     QueryUnstructuredRAGResponse,
+    ThinkingProcess,
     TokenUsage,
 )
 from src.config import Settings, get_settings
@@ -118,9 +120,9 @@ class HybridRAGEngine:
 
         full_context = "\n".join(context_parts)
 
-        # 3. Synthesize grounded answer
+        # 3. Synthesize grounded answer with dynamic LLM thought
         synth_start = time.perf_counter()
-        answer, synth_tokens = self._synthesize_grounded_answer(query_text, full_context, citations, raw_chunks)
+        answer, llm_thought, synth_tokens = self._synthesize_grounded_answer(query_text, full_context, citations, raw_chunks)
         synth_latency_ms = (time.perf_counter() - synth_start) * 1000.0
 
         total_lat = (time.perf_counter() - start_time) * 1000.0
@@ -150,26 +152,64 @@ class HybridRAGEngine:
             )
         )
 
+        # Construct Thinking Process with dynamic LLM thoughts
+        top_docs = list({c.document_name for c in citations})
+        top_docs_str = ", ".join(top_docs) if top_docs else "None"
+        synth_reason = llm_thought or f"Extracted {len(citations)} relevant excerpt(s) from [{top_docs_str}] and grounded response strictly in verified citations."
+
+        thinking = ThinkingProcess(
+            summary=f"Unstructured Hybrid RAG executed Dense Vector + Sparse BM25 retrieval over document(s) [{top_docs_str}], fusing {len(citations)} top chunk(s) via RRF.",
+            steps=[
+                DecisionStep(
+                    step_number=1,
+                    title="Dense Semantic Vector Retrieval",
+                    choice="Queried pgvector HNSW embeddings",
+                    reasoning=f"Generated embedding vector for query '{query_text}' and retrieved top semantic cosine matches.",
+                ),
+                DecisionStep(
+                    step_number=2,
+                    title="Sparse Keyword BM25 Retrieval",
+                    choice="Queried full-text tsvector index",
+                    reasoning=f"Scanned full-text index for exact lexical term matches across document catalog.",
+                ),
+                DecisionStep(
+                    step_number=3,
+                    title="Reciprocal Rank Fusion (RRF k=60)",
+                    choice=f"Fused top {len(citations)} chunk(s) across: {top_docs_str}",
+                    reasoning=f"Merged dense semantic and sparse lexical ranks using standard RRF (k=60) to optimize recall and precision.",
+                    details={"retrieved_chunks": len(citations), "documents": top_docs},
+                ),
+                DecisionStep(
+                    step_number=4,
+                    title="Grounded Answer Synthesis & Citation Binding",
+                    choice=f"Synthesized answer with {len(citations)} citation(s)",
+                    reasoning=synth_reason,
+                ),
+            ],
+        )
+
         return QueryUnstructuredRAGResponse(
             query=query_text,
             answer=answer,
             citations=citations,
             retrieved_chunks_count=len(citations),
+            thinking_process=thinking,
             metrics=metrics,
             token_usage=token_usage,
         )
 
     def _synthesize_grounded_answer(
         self, query: str, context: str, citations: List[Citation], raw_chunks: List[Dict[str, Any]]
-    ) -> Tuple[str, Tuple[int, int]]:
+    ) -> Tuple[str, Optional[str], Tuple[int, int]]:
         """Synthesize natural language answer strictly supported by context chunks."""
         prompt = (
             f"You are a precise AI knowledge assistant. Answer the user's question using ONLY the retrieved excerpts below.\n\n"
             f"Retrieved Document Context:\n{context}\n\n"
-            f"Rules:\n"
-            f"1. Base your answer strictly on the facts present in the excerpts.\n"
-            f"2. Include exact bracketed citations for every stated fact in the format [Doc: <doc_name>, Page: <page_num>, Chunk: <chunk_index>].\n"
-            f"3. If the context does not contain sufficient information, state 'Based on the provided documents, I could not find information to answer this question.'\n\n"
+            f"Instructions:\n"
+            f"1. In a ```thought block, explain your step-by-step reasoning: which facts and excerpts you referenced and how you answered the question.\n"
+            f"2. Base your answer strictly on the facts present in the excerpts.\n"
+            f"3. Include exact bracketed citations for every stated fact in the format [Doc: <doc_name>, Page: <page_num>, Chunk: <chunk_index>].\n"
+            f"4. If the context does not contain sufficient information, state 'Based on the provided documents, I could not find information to answer this question.'\n\n"
             f"Question: {query}"
         )
 
@@ -182,16 +222,26 @@ class HybridRAGEngine:
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.0,
                 )
-                ans = resp.choices[0].message.content or ""
-                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(ans) // 4)
-                return ans.strip(), (prompt_tokens, comp_tokens)
+                raw_text = resp.choices[0].message.content or ""
+                
+                thought = None
+                ans = raw_text
+                blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
+                for lang, content in blocks:
+                    lang_clean = lang.lower().strip()
+                    if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
+                        thought = content.strip()
+                        ans = raw_text.replace(f"```{lang}\n{content}```", "").strip()
+
+                comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+                return ans.strip(), thought, (prompt_tokens, comp_tokens)
             except Exception:
                 pass
 
         # Deterministic grounded synthesizer
         ans = self._deterministic_rag_synthesis(query, citations, raw_chunks)
         comp_tokens = max(1, len(ans) // 4)
-        return ans, (prompt_tokens, comp_tokens)
+        return ans, None, (prompt_tokens, comp_tokens)
 
     def _deterministic_rag_synthesis(
         self, query: str, citations: List[Citation], raw_chunks: List[Dict[str, Any]]

@@ -104,6 +104,8 @@ class TestAPIRoutes(unittest.TestCase):
         resp = asyncio.run(query.query_dedicated_db_endpoint(req))
         self.assertIsNone(resp.error)
         self.assertEqual(resp.tabular_result.row_count, 1)
+        self.assertIsNotNone(resp.thinking_process)
+        self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
     def test_query_duckdb_endpoint(self):
         """Verify POST /query/duckdb."""
@@ -111,6 +113,8 @@ class TestAPIRoutes(unittest.TestCase):
         resp = asyncio.run(query.query_duckdb_endpoint(req))
         self.assertIsNone(resp.error)
         self.assertEqual(resp.tabular_result.row_count, 1)
+        self.assertIsNotNone(resp.thinking_process)
+        self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
     def test_query_pandas_sandbox_endpoint(self):
         """Verify POST /query/pandas-sandbox."""
@@ -119,6 +123,8 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIsNone(resp.error)
         self.assertTrue(resp.security_report.ast_passed)
         self.assertEqual(resp.tabular_result.row_count, 1)
+        self.assertIsNotNone(resp.thinking_process)
+        self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
     def test_query_unstructured_rag_endpoint(self):
         """Verify POST /query/unstructured-rag."""
@@ -127,6 +133,8 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIsNone(resp.error)
         self.assertGreater(resp.retrieved_chunks_count, 0)
         self.assertIn("1000 requests", resp.answer)
+        self.assertIsNotNone(resp.thinking_process)
+        self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
     def test_query_benchmark_endpoint(self):
         """Verify POST /query/benchmark."""
@@ -136,6 +144,9 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertEqual(resp.strategy_b.status, "SUCCESS")
         self.assertEqual(resp.strategy_c.status, "SUCCESS")
         self.assertTrue(resp.benchmark_summary.consensus_reached)
+        self.assertIsNotNone(resp.strategy_a.thinking_process)
+        self.assertIsNotNone(resp.strategy_b.thinking_process)
+        self.assertIsNotNone(resp.strategy_c.thinking_process)
 
     def test_query_agent_endpoint(self):
         """Verify POST /query/agent conversational endpoint."""
@@ -146,6 +157,8 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertEqual(resp.session_id, "test_sess_api")
         self.assertGreater(resp.token_usage.total_tokens, 0)
         self.assertIn("2", resp.answer)
+        self.assertIsNotNone(resp.thinking_process)
+        self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
 
 if __name__ == "__main__":

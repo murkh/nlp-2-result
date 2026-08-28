@@ -277,5 +277,48 @@ class TestBackendClient(unittest.TestCase):
         self.assertEqual(len(df_obj), 1)
 
 
+class TestUIHelpers(unittest.TestCase):
+    """Test suite for UI rendering functions."""
+
+    def test_render_model_thinking_execution(self):
+        """Verify render_model_thinking executes cleanly with mock Streamlit."""
+        from frontend.ui import render_model_thinking
+        
+        sample_thinking = {
+            "summary": "Processed with DuckDB",
+            "steps": [
+                {
+                    "step_number": 1,
+                    "title": "Intent Classification",
+                    "choice": "STRUCTURED_QUERY",
+                    "reasoning": "Detected SQL keywords",
+                    "details": {"confidence": 0.98},
+                },
+                {
+                    "step_number": 2,
+                    "title": "Schema Pruning",
+                    "choice": "Selected orders table",
+                    "reasoning": "Filtered irrelevant columns",
+                    "details": {"retained_columns": {"orders": ["order_id", "total_amount"]}},
+                },
+            ],
+        }
+        
+        with patch("streamlit.expander") as mock_expander, \
+             patch("streamlit.markdown") as mock_markdown, \
+             patch("streamlit.info") as mock_info, \
+             patch("streamlit.write") as mock_write, \
+             patch("streamlit.divider") as mock_div:
+            mock_expander.return_value.__enter__.return_value = MagicMock()
+            
+            # Should run without error
+            render_model_thinking(sample_thinking, default_expanded=True)
+            mock_expander.assert_called_once()
+            
+            # None / Empty should safely no-op
+            render_model_thinking(None)
+            render_model_thinking({})
+
+
 if __name__ == "__main__":
     unittest.main()

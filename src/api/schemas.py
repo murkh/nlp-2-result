@@ -195,6 +195,57 @@ class SandboxSecurityReport(BaseModel):
         )
 
 
+class DecisionStep(BaseModel):
+    """Structured decision or reasoning step in model execution chain."""
+    step_number: int = Field(default=1, description="Sequential step index")
+    title: str = Field(default="", description="Short title of decision step (e.g. Intent Classification, Schema Pruning)")
+    choice: str = Field(default="", description="Key selection made by the model")
+    reasoning: str = Field(default="", description="Detailed chain-of-thought explanation")
+    details: Dict[str, Any] = Field(default_factory=dict, description="Supplementary structured metadata")
+
+    def __init__(
+        self,
+        step_number: int = 1,
+        title: str = "",
+        choice: str = "",
+        reasoning: str = "",
+        details: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ):
+        super().__init__(
+            step_number=step_number,
+            title=title,
+            choice=choice,
+            reasoning=reasoning,
+            details=details or {},
+            **kwargs
+        )
+
+
+class ThinkingProcess(BaseModel):
+    """Complete transparent reasoning process and decision trail made by the model."""
+    summary: str = Field(default="", description="High-level overview of decision path")
+    steps: List[DecisionStep] = Field(default_factory=list, description="Ordered decision steps")
+
+    def __init__(
+        self,
+        summary: str = "",
+        steps: Optional[List[Union[DecisionStep, Dict[str, Any]]]] = None,
+        **kwargs
+    ):
+        step_list = []
+        for s in (steps or []):
+            if isinstance(s, DecisionStep):
+                step_list.append(s)
+            elif isinstance(s, dict):
+                step_list.append(DecisionStep(**s))
+        super().__init__(
+            summary=summary,
+            steps=step_list,
+            **kwargs
+        )
+
+
 # =============================================================================
 # Request Schemas
 # =============================================================================
@@ -356,6 +407,7 @@ class QueryDedicatedDBResponse(BaseModel):
     answer: str = Field(..., description="Synthesized natural language answer with data evidence")
     sql_query: str = Field(..., description="Generated PostgreSQL dialect SQL query")
     tabular_result: TabularResult = Field(default_factory=TabularResult, description="Execution result table")
+    thinking_process: Optional[ThinkingProcess] = Field(default=None, description="Transparent decision and reasoning trail")
     metrics: ExecutionMetrics = Field(default_factory=ExecutionMetrics, description="Latency breakdown")
     token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Token counts and estimated cost")
     error: Optional[str] = Field(default=None, description="Error message if execution failed")
@@ -366,12 +418,14 @@ class QueryDedicatedDBResponse(BaseModel):
         answer: str,
         sql_query: str,
         tabular_result: Optional[Union[TabularResult, Dict[str, Any]]] = None,
+        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
         metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
         token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
         error: Optional[str] = None,
         **kwargs
     ):
         tab = tabular_result if isinstance(tabular_result, TabularResult) else TabularResult(**(tabular_result or {}))
+        think = thinking_process if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None) else ThinkingProcess(**thinking_process)
         met = metrics if isinstance(metrics, ExecutionMetrics) else ExecutionMetrics(**(metrics or {}))
         tok = token_usage if isinstance(token_usage, TokenUsage) else TokenUsage(**(token_usage or {}))
         super().__init__(
@@ -379,6 +433,7 @@ class QueryDedicatedDBResponse(BaseModel):
             answer=answer,
             sql_query=sql_query,
             tabular_result=tab,
+            thinking_process=think,
             metrics=met,
             token_usage=tok,
             error=error,
@@ -392,6 +447,7 @@ class QueryDuckDBResponse(BaseModel):
     answer: str = Field(..., description="Synthesized natural language answer with data evidence")
     sql_query: str = Field(..., description="Generated DuckDB SQL query")
     tabular_result: TabularResult = Field(default_factory=TabularResult, description="Execution result table")
+    thinking_process: Optional[ThinkingProcess] = Field(default=None, description="Transparent decision and reasoning trail")
     metrics: ExecutionMetrics = Field(default_factory=ExecutionMetrics, description="Latency breakdown")
     token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Token counts and estimated cost")
     error: Optional[str] = Field(default=None, description="Error message if execution failed")
@@ -402,12 +458,14 @@ class QueryDuckDBResponse(BaseModel):
         answer: str,
         sql_query: str,
         tabular_result: Optional[Union[TabularResult, Dict[str, Any]]] = None,
+        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
         metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
         token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
         error: Optional[str] = None,
         **kwargs
     ):
         tab = tabular_result if isinstance(tabular_result, TabularResult) else TabularResult(**(tabular_result or {}))
+        think = thinking_process if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None) else ThinkingProcess(**thinking_process)
         met = metrics if isinstance(metrics, ExecutionMetrics) else ExecutionMetrics(**(metrics or {}))
         tok = token_usage if isinstance(token_usage, TokenUsage) else TokenUsage(**(token_usage or {}))
         super().__init__(
@@ -415,6 +473,7 @@ class QueryDuckDBResponse(BaseModel):
             answer=answer,
             sql_query=sql_query,
             tabular_result=tab,
+            thinking_process=think,
             metrics=met,
             token_usage=tok,
             error=error,
@@ -429,6 +488,7 @@ class QueryPandasSandboxResponse(BaseModel):
     python_code: str = Field(..., description="Generated Pandas transformation Python code")
     tabular_result: TabularResult = Field(default_factory=TabularResult, description="Execution result table or scalar")
     security_report: SandboxSecurityReport = Field(default_factory=SandboxSecurityReport, description="Sandbox security telemetry")
+    thinking_process: Optional[ThinkingProcess] = Field(default=None, description="Transparent decision and reasoning trail")
     metrics: ExecutionMetrics = Field(default_factory=ExecutionMetrics, description="Latency breakdown")
     token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Token counts and estimated cost")
     error: Optional[str] = Field(default=None, description="Error message if execution failed")
@@ -440,6 +500,7 @@ class QueryPandasSandboxResponse(BaseModel):
         python_code: str,
         tabular_result: Optional[Union[TabularResult, Dict[str, Any]]] = None,
         security_report: Optional[Union[SandboxSecurityReport, Dict[str, Any]]] = None,
+        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
         metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
         token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
         error: Optional[str] = None,
@@ -447,6 +508,7 @@ class QueryPandasSandboxResponse(BaseModel):
     ):
         tab = tabular_result if isinstance(tabular_result, TabularResult) else TabularResult(**(tabular_result or {}))
         sec = security_report if isinstance(security_report, SandboxSecurityReport) else SandboxSecurityReport(**(security_report or {}))
+        think = thinking_process if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None) else ThinkingProcess(**thinking_process)
         met = metrics if isinstance(metrics, ExecutionMetrics) else ExecutionMetrics(**(metrics or {}))
         tok = token_usage if isinstance(token_usage, TokenUsage) else TokenUsage(**(token_usage or {}))
         super().__init__(
@@ -455,6 +517,7 @@ class QueryPandasSandboxResponse(BaseModel):
             python_code=python_code,
             tabular_result=tab,
             security_report=sec,
+            thinking_process=think,
             metrics=met,
             token_usage=tok,
             error=error,
@@ -468,6 +531,7 @@ class QueryUnstructuredRAGResponse(BaseModel):
     answer: str = Field(..., description="Grounded natural language answer with bracketed citations")
     citations: List[Citation] = Field(default_factory=list, description="Bracketed source citations")
     retrieved_chunks_count: int = Field(default=0, description="Total chunks retrieved after RRF fusion")
+    thinking_process: Optional[ThinkingProcess] = Field(default=None, description="Transparent decision and reasoning trail")
     metrics: ExecutionMetrics = Field(default_factory=ExecutionMetrics, description="Latency breakdown")
     token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Token counts and estimated cost")
     error: Optional[str] = Field(default=None, description="Error message if failed")
@@ -478,6 +542,7 @@ class QueryUnstructuredRAGResponse(BaseModel):
         answer: str,
         citations: Optional[List[Union[Citation, Dict[str, Any]]]] = None,
         retrieved_chunks_count: int = 0,
+        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
         metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
         token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
         error: Optional[str] = None,
@@ -489,6 +554,7 @@ class QueryUnstructuredRAGResponse(BaseModel):
                 c_list.append(c)
             elif isinstance(c, dict):
                 c_list.append(Citation(**c))
+        think = thinking_process if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None) else ThinkingProcess(**thinking_process)
         met = metrics if isinstance(metrics, ExecutionMetrics) else ExecutionMetrics(**(metrics or {}))
         tok = token_usage if isinstance(token_usage, TokenUsage) else TokenUsage(**(token_usage or {}))
         super().__init__(
@@ -496,6 +562,7 @@ class QueryUnstructuredRAGResponse(BaseModel):
             answer=answer,
             citations=c_list,
             retrieved_chunks_count=retrieved_chunks_count or len(c_list),
+            thinking_process=think,
             metrics=met,
             token_usage=tok,
             error=error,
@@ -514,6 +581,7 @@ class StrategyBenchmarkResult(BaseModel):
     code_generated: str = Field(default="", description="Generated SQL query or Python code")
     answer: str = Field(default="", description="Synthesized answer")
     tabular_result: TabularResult = Field(default_factory=TabularResult, description="Result records and column schema")
+    thinking_process: Optional[ThinkingProcess] = Field(default=None, description="Transparent decision and reasoning trail")
     metrics: ExecutionMetrics = Field(default_factory=ExecutionMetrics, description="Latency breakdown")
     token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Token usage")
     error: Optional[str] = Field(default=None, description="Error message if failed")
@@ -525,12 +593,14 @@ class StrategyBenchmarkResult(BaseModel):
         code_generated: str = "",
         answer: str = "",
         tabular_result: Optional[Union[TabularResult, Dict[str, Any]]] = None,
+        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
         metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
         token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
         error: Optional[str] = None,
         **kwargs
     ):
         tab = tabular_result if isinstance(tabular_result, TabularResult) else TabularResult(**(tabular_result or {}))
+        think = thinking_process if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None) else ThinkingProcess(**thinking_process)
         met = metrics if isinstance(metrics, ExecutionMetrics) else ExecutionMetrics(**(metrics or {}))
         tok = token_usage if isinstance(token_usage, TokenUsage) else TokenUsage(**(token_usage or {}))
         super().__init__(
@@ -539,6 +609,7 @@ class StrategyBenchmarkResult(BaseModel):
             code_generated=code_generated,
             answer=answer,
             tabular_result=tab,
+            thinking_process=think,
             metrics=met,
             token_usage=tok,
             error=error,
@@ -618,6 +689,7 @@ class QueryAgentResponse(BaseModel):
     citations: List[Any] = Field(default_factory=list, description="Source citations or documentation references")
     clarification_message: Optional[str] = Field(default=None, description="Clarification message if intent was ambiguous")
     candidate_datasets: List[str] = Field(default_factory=list, description="Relevant datasets identified")
+    thinking_process: Optional[ThinkingProcess] = Field(default=None, description="Transparent decision and reasoning trail")
     metrics: ExecutionMetrics = Field(default_factory=ExecutionMetrics, description="Latency breakdown in ms")
     token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Token consumption and cost")
     telemetry: Optional[Dict[str, Any]] = Field(default=None, description="Complete Langfuse / local trace dictionary")
@@ -637,6 +709,7 @@ class QueryAgentResponse(BaseModel):
         citations: Optional[List[Any]] = None,
         clarification_message: Optional[str] = None,
         candidate_datasets: Optional[List[str]] = None,
+        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
         metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
         token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
         telemetry: Optional[Dict[str, Any]] = None,
@@ -644,6 +717,7 @@ class QueryAgentResponse(BaseModel):
         **kwargs
     ):
         tab = tabular_result if isinstance(tabular_result, TabularResult) else TabularResult(**(tabular_result or {}))
+        think = thinking_process if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None) else ThinkingProcess(**thinking_process)
         met = metrics if isinstance(metrics, ExecutionMetrics) else ExecutionMetrics(**(metrics or {}))
         tok = token_usage if isinstance(token_usage, TokenUsage) else TokenUsage(**(token_usage or {}))
         super().__init__(
@@ -659,6 +733,7 @@ class QueryAgentResponse(BaseModel):
             citations=citations or [],
             clarification_message=clarification_message,
             candidate_datasets=candidate_datasets or [],
+            thinking_process=think,
             metrics=met,
             token_usage=tok,
             telemetry=telemetry,

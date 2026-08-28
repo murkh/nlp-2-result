@@ -92,6 +92,13 @@ class SupervisorRouter:
     ):
         self.db_manager = db_manager or get_db_manager()
         self.settings = settings or get_settings()
+        self._openai_client = None
+        if self.settings.openai_api_key:
+            try:
+                from openai import OpenAI
+                self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
+            except Exception:
+                pass
 
     def classify_intent(self, query: str, session_id: Optional[str] = None) -> SupervisorDecision:
         """
@@ -113,7 +120,6 @@ class SupervisorRouter:
                 )
 
         # Strip conversational prefix if present for further intent analysis
-        # e.g., "Hello, how many orders are there?" -> "how many orders are there?"
         stripped_q = re.sub(
             r"^\s*(hi|hello|hey|greetings|howdy|good\s+(morning|afternoon|evening|day))(\s+(there|all|team|bot|assistant|everyone|everybody|folks))*\s*[,!.:-]*\s*",
             "",
@@ -138,7 +144,6 @@ class SupervisorRouter:
 
         # Check conversational identity / capability inquiry
         if any(phrase in eval_q or phrase in lower_q for phrase in CONVERSATIONAL_PHRASES):
-            # Only classify as chitchat if there are NO substantive structured or unstructured indicators
             if struct_score == 0 and unstruct_score == 0:
                 return SupervisorDecision(
                     intent="GREETING_OR_CHITCHAT",
@@ -170,14 +175,50 @@ class SupervisorRouter:
                     ),
                 )
 
-        # 3. Check Strategy hint for structured query
+        # 3. LLM-Based Intent Classification if OpenAI client is active
+        if self._openai_client:
+            try:
+                import json
+                llm_prompt = (
+                    f"You are the Supervisor Router for an AI Knowledge Base Q&A platform.\n"
+                    f"Classify the following user query into one of: STRUCTURED_QUERY, UNSTRUCTURED_QUERY, AMBIGUOUS_QUERY, GREETING_OR_CHITCHAT.\n"
+                    f"Available structured tables: {dataset_info.get('structured', [])}\n"
+                    f"Available unstructured documents: {dataset_info.get('unstructured', [])}\n"
+                    f"User Query: {clean_q}\n\n"
+                    f"Provide response strictly in JSON format:\n"
+                    f'{{"intent": "...", "confidence": 0.95, "reasoning": "...", "suggested_strategy": "duckdb"}}'
+                )
+                resp = self._openai_client.chat.completions.create(
+                    model=self.settings.openai_model,
+                    messages=[{"role": "user", "content": llm_prompt}],
+                    temperature=0.0,
+                    response_format={"type": "json_object"} if hasattr(self.settings, "openai_model") else None,
+                )
+                raw_json = resp.choices[0].message.content or "{}"
+                data = json.loads(raw_json)
+                intent_val = data.get("intent", "").upper()
+                if intent_val in ("STRUCTURED_QUERY", "UNSTRUCTURED_QUERY", "AMBIGUOUS_QUERY", "GREETING_OR_CHITCHAT"):
+                    strat = data.get("suggested_strategy")
+                    if strat not in ("duckdb", "dedicated_db", "pandas_sandbox"):
+                        strat = "duckdb"
+                    return SupervisorDecision(
+                        intent=intent_val,
+                        confidence=float(data.get("confidence", 0.95)),
+                        reasoning=str(data.get("reasoning", f"LLM classified query as {intent_val}")),
+                        suggested_strategy=strat if intent_val == "STRUCTURED_QUERY" else None,
+                        relevant_datasets=dataset_info.get("structured" if intent_val == "STRUCTURED_QUERY" else "unstructured", []),
+                        clarification_question=data.get("clarification_question"),
+                    )
+            except Exception:
+                pass
+
+        # 4. Deterministic / Heuristic Classification Fallback
         suggested_strategy: Literal["dedicated_db", "duckdb", "pandas_sandbox"] = "duckdb"
         if "pandas" in eval_q or "python" in eval_q or "dataframe" in eval_q or "sandbox" in eval_q:
             suggested_strategy = "pandas_sandbox"
         elif "postgres" in eval_q or "dedicated" in eval_q or "postgresql" in eval_q or "sql table" in eval_q:
             suggested_strategy = "dedicated_db"
 
-        # 4. Check Unstructured vs Structured indicators
         if unstruct_score > struct_score and unstruct_score > 0:
             return SupervisorDecision(
                 intent="UNSTRUCTURED_QUERY",
@@ -198,7 +239,6 @@ class SupervisorRouter:
                 clarification_question=None,
             )
 
-        # Default fallback for informational query with no explicit keywords
         return SupervisorDecision(
             intent="UNSTRUCTURED_QUERY",
             confidence=0.70,

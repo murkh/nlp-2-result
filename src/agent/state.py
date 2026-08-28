@@ -63,3 +63,4 @@ class AgentState(TypedDict, total=False):
 
     # Observability & Metrics
     telemetry: TelemetryData
+    thinking_process: Optional[Dict[str, Any]]

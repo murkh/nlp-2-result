@@ -193,6 +193,56 @@ def render_telemetry_metrics(
         st.caption(f"🔗 Trace ID: `{trace_id}`")
 
 
+def render_model_thinking(thinking_data: Optional[Dict[str, Any]], default_expanded: bool = True):
+    """Render interactive Model Thinking & Decision Choices step-by-step panel."""
+    if not thinking_data:
+        return
+
+    steps = thinking_data.get("steps", [])
+    summary = thinking_data.get("summary", "")
+
+    if not steps and not summary:
+        return
+
+    with st.expander(f"🧠 Model Thinking & Decision Choices ({len(steps)} steps)", expanded=default_expanded):
+        if summary:
+            st.markdown(f"**Decision Summary:** *{summary}*")
+            st.divider()
+
+        for step in steps:
+            step_num = step.get("step_number", 1)
+            title = step.get("title", f"Step {step_num}")
+            choice = step.get("choice", "")
+            reasoning = step.get("reasoning", "")
+            details = step.get("details", {})
+
+            # Step title with category icon
+            icon = "🔵" if step_num == 1 else ("🟢" if step_num == 2 else ("🛡️" if "Security" in title or "Guardrail" in title or "Check" in title else ("⚡" if "Execution" in title or "Query" in title else "✨")))
+            st.markdown(f"##### {icon} Step {step_num}: {title}")
+            
+            if choice:
+                st.info(f"**Model Choice:** {choice}")
+            if reasoning:
+                st.write(f"**Chain of Thought:** {reasoning}")
+            
+            # Supplementary details
+            if details:
+                if "retained_columns" in details and details["retained_columns"]:
+                    st.caption("📋 **Retained Columns for Token Minimization:**")
+                    for tbl, cols in details["retained_columns"].items():
+                        st.write(f"- `{tbl}`: `{', '.join(cols)}`")
+                elif "sql" in details:
+                    st.caption("Formulated SQL:")
+                    st.code(details["sql"], language="sql")
+                elif "code" in details:
+                    st.caption("Formulated Code:")
+                    st.code(details["code"], language="python")
+                elif "violations" in details and details["violations"]:
+                    st.warning(f"⚠️ Security Violations Detected: {', '.join(details['violations'])}")
+            
+            st.markdown("---")
+
+
 # -----------------------------------------------------------------------------
 # Main Tabs Layout
 # -----------------------------------------------------------------------------
@@ -377,6 +427,10 @@ with tab_qa:
                         strategy=msg.get("suggested_strategy"),
                     )
 
+                # Transparent Model Thinking & Decision Choices Panel
+                if msg.get("thinking_process"):
+                    render_model_thinking(msg["thinking_process"], default_expanded=True)
+
                 st.markdown(msg["content"])
 
                 # Clarification suggestion buttons if ambiguous
@@ -444,6 +498,7 @@ with tab_qa:
                         "content": resp.get("answer", ""),
                         "generated_code": resp.get("sql_query"),
                         "tabular_result": resp.get("tabular_result"),
+                        "thinking_process": resp.get("thinking_process"),
                         "metrics": resp.get("metrics", {}),
                         "token_usage": resp.get("token_usage", {}),
                         "suggested_strategy": "dedicated_db",
@@ -455,6 +510,7 @@ with tab_qa:
                         "content": resp.get("answer", ""),
                         "generated_code": resp.get("sql_query"),
                         "tabular_result": resp.get("tabular_result"),
+                        "thinking_process": resp.get("thinking_process"),
                         "metrics": resp.get("metrics", {}),
                         "token_usage": resp.get("token_usage", {}),
                         "suggested_strategy": "duckdb",
@@ -466,6 +522,7 @@ with tab_qa:
                         "content": resp.get("answer", ""),
                         "generated_code": resp.get("python_code"),
                         "tabular_result": resp.get("tabular_result"),
+                        "thinking_process": resp.get("thinking_process"),
                         "metrics": resp.get("metrics", {}),
                         "token_usage": resp.get("token_usage", {}),
                         "suggested_strategy": "pandas_sandbox",
@@ -481,6 +538,7 @@ with tab_qa:
                     resp_payload = {
                         "content": resp.get("answer", ""),
                         "citations": resp.get("citations", []),
+                        "thinking_process": resp.get("thinking_process"),
                         "metrics": resp.get("metrics", {}),
                         "token_usage": resp.get("token_usage", {}),
                         "intent": "UNSTRUCTURED_QUERY",
@@ -499,6 +557,7 @@ with tab_qa:
                     "citations": resp_payload.get("citations", []),
                     "clarification_message": resp_payload.get("clarification_message"),
                     "candidate_datasets": resp_payload.get("candidate_datasets", []),
+                    "thinking_process": resp_payload.get("thinking_process"),
                     "metrics": resp_payload.get("metrics", {}),
                     "token_usage": resp_payload.get("token_usage", {}),
                     "trace_id": (resp_payload.get("telemetry") or {}).get("trace_id"),
@@ -625,6 +684,10 @@ with tab_benchmark:
                 st.write(f"⏱️ **Latency:** {client.format_latency(lat_ms)}")
                 st.write(f"🪙 **Tokens:** {tot_toks} ({tok.get('prompt_tokens', 0)} / {tok.get('completion_tokens', 0)})")
                 
+                # Model Thinking & Choices
+                if data.get("thinking_process"):
+                    render_model_thinking(data["thinking_process"], default_expanded=False)
+
                 # Answer
                 if data.get("answer"):
                     st.markdown(f"**Answer:** {data.get('answer')}")
