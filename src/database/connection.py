@@ -13,6 +13,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
+import psycopg
+from psycopg_pool import ConnectionPool
+
 from src.config import Settings, get_settings
 from src.database.models import ColumnMetadata, Dataset, DocumentChunk, QueryLog, TableMetadata
 
@@ -44,29 +47,17 @@ class DatabaseManager:
         self._sqlite_conn: Optional[sqlite3.Connection] = None
         self._sqlite_lock = threading.RLock()
 
-        # Try connecting to PostgreSQL if not explicitly in_memory
-        if not self.in_memory:
+        if self.in_memory:
+            self._init_sqlite()
+        else:
             self._init_postgres()
 
-        if self._pg_pool is None:
-            # Fallback to in-memory SQLite store
-            self.in_memory = True
-            self._init_sqlite()
-
     def _init_postgres(self):
-        """Initialize PostgreSQL connection pool if available."""
-        try:
-            import psycopg
-            from psycopg_pool import ConnectionPool
-
-            # Test quick connection
-            with psycopg.connect(self.settings.database_url, connect_timeout=2) as test_conn:
-                test_conn.execute("SELECT 1")
-            self._pg_pool = ConnectionPool(
-                conninfo=self.settings.database_url, min_size=1, max_size=10
-            )
-        except Exception:
-            self._pg_pool = None
+        """Initialize the PostgreSQL connection pool. Raises if the database is unreachable."""
+        # Test quick connection
+        with psycopg.connect(self.settings.database_url, connect_timeout=2) as test_conn:
+            test_conn.execute("SELECT 1")
+        self._pg_pool = ConnectionPool(conninfo=self.settings.database_url, min_size=1, max_size=10)
 
     def _init_sqlite(self):
         """Initialize SQLite in-memory database with required schema."""

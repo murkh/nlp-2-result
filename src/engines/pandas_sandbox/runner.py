@@ -2,7 +2,6 @@
 Subprocess Runner for Sandboxed Python DataFrame Execution.
 Executes code in an isolated subprocess with watchdog timeouts,
 resource limits, environment sanitation, and standardized JSON protocol.
-Provides lightweight pandas/polars shims if wheels are not installed.
 """
 
 import json
@@ -16,7 +15,6 @@ from typing import Any, Dict, Optional, Tuple
 WRAPPER_TEMPLATE = """
 import sys
 import json
-import csv
 
 # Set POSIX resource limits if supported
 try:
@@ -25,140 +23,7 @@ try:
 except Exception:
     pass
 
-# Provide lightweight pandas fallback shim if pandas is not installed
-try:
-    import pandas as pd
-except ImportError:
-    import types
-
-    class _SimpleSeries:
-        def __init__(self, data, name=None):
-            self._data = list(data)
-            self.name = name
-        def sum(self):
-            return sum(float(x) for x in self._data if x is not None)
-        def mean(self):
-            return (sum(float(x) for x in self._data if x is not None) / len(self._data)) if self._data else 0.0
-        def count(self):
-            return len(self._data)
-        def head(self, n=20):
-            return _SimpleSeries(self._data[:n], name=self.name)
-        def to_dict(self):
-            return {i: v for i, v in enumerate(self._data)}
-        def __len__(self):
-            return len(self._data)
-
-    class _SimpleDataFrame:
-        def __init__(self, records, columns=None):
-            self._records = records
-            if columns:
-                self.columns = columns
-            elif records and isinstance(records[0], dict):
-                self.columns = list(records[0].keys())
-            else:
-                self.columns = []
-
-        def __getitem__(self, item):
-            if isinstance(item, list):
-                sub_records = [{k: r.get(k) for k in item} for r in self._records]
-                return _SimpleDataFrame(sub_records, columns=item)
-            vals = [r.get(item) for r in self._records]
-            return _SimpleSeries(vals, name=item)
-
-        def __setitem__(self, key, value):
-            if isinstance(value, _SimpleSeries):
-                for r, v in zip(self._records, value._data):
-                    r[key] = v
-            elif isinstance(value, list):
-                for r, v in zip(self._records, value):
-                    r[key] = v
-            else:
-                for r in self._records:
-                    r[key] = value
-            if key not in self.columns:
-                self.columns.append(key)
-
-        def __len__(self):
-            return len(self._records)
-
-        def head(self, n=20):
-            return _SimpleDataFrame(self._records[:n], columns=self.columns)
-
-        def sort_values(self, by, ascending=True):
-            def key_func(r):
-                val = r.get(by)
-                try:
-                    return float(val)
-                except Exception:
-                    return str(val)
-            sorted_recs = sorted(self._records, key=key_func, reverse=not ascending)
-            return _SimpleDataFrame(sorted_recs, columns=self.columns)
-
-        def groupby(self, by):
-            class _Group:
-                def __init__(self, records, by_col):
-                    self.records = records
-                    self.by_col = by_col
-                def size(self):
-                    counts = {}
-                    for r in self.records:
-                        k = r.get(self.by_col)
-                        counts[k] = counts.get(k, 0) + 1
-                    class _Res:
-                        def reset_index(self, name="total_count"):
-                            recs = [{self.by_col: k, name: v} for k, v in counts.items()]
-                            return _SimpleDataFrame(recs)
-                    return _Res()
-                def __getitem__(self, col):
-                    class _Agg:
-                        def __init__(self, records, by_col, agg_col):
-                            self.records = records
-                            self.by_col = by_col
-                            self.agg_col = agg_col
-                        def sum(self):
-                            totals = {}
-                            for r in self.records:
-                                k = r.get(self.by_col)
-                                try:
-                                    v = float(r.get(self.agg_col, 0) or 0)
-                                except Exception:
-                                    v = 0.0
-                                totals[k] = totals.get(k, 0.0) + v
-                            class _Res:
-                                def reset_index(self, name="total_revenue"):
-                                    recs = [{self.by_col: k, name: v} for k, v in totals.items()]
-                                    return _SimpleDataFrame(recs)
-                            return _Res()
-                    return _Agg(self.records, self.by_col, col)
-            return _Group(self._records, by)
-
-        def to_dict(self, orient="records"):
-            return self._records
-
-    def _read_csv(filepath, *args, **kwargs):
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            reader = csv.DictReader(f)
-            records = list(reader)
-        return _SimpleDataFrame(records)
-
-    def _to_numeric(series, errors="coerce"):
-        if isinstance(series, _SimpleSeries):
-            new_vals = []
-            for x in series._data:
-                try:
-                    new_vals.append(float(x))
-                except Exception:
-                    new_vals.append(0.0 if errors == "coerce" else x)
-            return _SimpleSeries(new_vals, name=series.name)
-        return series
-
-    fake_pd = types.ModuleType("pandas")
-    fake_pd.read_csv = _read_csv
-    fake_pd.read_parquet = _read_csv
-    fake_pd.DataFrame = _SimpleDataFrame
-    fake_pd.Series = _SimpleSeries
-    fake_pd.to_numeric = _to_numeric
-    sys.modules["pandas"] = fake_pd
+import pandas as pd
 
 user_code = sys.stdin.read()
 local_env = {}

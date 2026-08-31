@@ -28,7 +28,9 @@ import time
 import unittest
 from typing import Any, Dict, List
 
-from src.evaluation.compat import DataFrame, Series, np, pd
+import numpy as np
+import pandas as pd
+from pandas import DataFrame, Series
 from src.evaluation.ragas_suite import (
     RagasEvaluationResult,
     RagasEvaluator,

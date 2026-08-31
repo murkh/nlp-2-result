@@ -17,7 +17,9 @@ import numbers
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
-from src.evaluation.compat import DataFrame, Series, np, pd
+import numpy as np
+import pandas as pd
+from pandas import DataFrame, Series
 
 # Model pricing table per 1M tokens ($ USD)
 MODEL_TOKEN_PRICING: Dict[str, Dict[str, float]] = {

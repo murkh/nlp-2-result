@@ -5,14 +5,15 @@ generates DuckDB analytical SQL, executes in-memory with security PRAGMAs,
 enforces LIMIT 20 guardrails, and synthesizes natural language answers.
 """
 
-import csv
 import logging
 import os
 import re
-import sqlite3
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+import duckdb
+import pandas as pd
 
 from src.api.schemas import (
     DecisionStep,
@@ -293,11 +294,8 @@ class DuckDBQueryEngine:
     ) -> Tuple[List[str], List[Tuple[Any, ...]], Optional[str]]:
         """
         Execute DuckDB query with temporary view registration.
-        Falls back gracefully to SQLite in-memory virtual tables if duckdb wheel is missing.
         """
         try:
-            import duckdb
-
             con = duckdb.connect(":memory:")
             con.execute("PRAGMA threads=2;")
             con.execute("PRAGMA memory_limit='512MB';")
@@ -311,13 +309,7 @@ class DuckDBQueryEngine:
                         f"CREATE VIEW \"{table_name}\" AS SELECT * FROM read_parquet('{blob_path}');"
                     )
                 elif ext in (".xlsx", ".xls"):
-                    try:
-                        import pandas as pd
-
-                        df_excel = pd.read_excel(blob_path)
-                        con.register(table_name, df_excel)
-                    except Exception:
-                        pass
+                    con.register(table_name, pd.read_excel(blob_path))
                 else:
                     con.execute(
                         f"CREATE VIEW \"{table_name}\" AS SELECT * FROM read_csv('{blob_path}', auto_detect=true);"
@@ -329,50 +321,8 @@ class DuckDBQueryEngine:
             con.close()
             return cols, rows, None
 
-        except ImportError:
-            return self._execute_sqlite_fallback(sql_query, file_paths)
         except Exception as e:
             return [], [], str(e)
-
-    def _execute_sqlite_fallback(
-        self,
-        sql_query: str,
-        file_paths: Dict[str, str],
-    ) -> Tuple[List[str], List[Tuple[Any, ...]], Optional[str]]:
-        """Fallback in-memory execution using SQLite when duckdb is not installed."""
-        try:
-            conn = sqlite3.connect(":memory:")
-            cur = conn.cursor()
-
-            for table_name, blob_path in file_paths.items():
-                if not os.path.exists(blob_path):
-                    continue
-                with open(blob_path, "r", encoding="utf-8", errors="replace") as f:
-                    reader = csv.reader(f)
-                    header = next(reader, None)
-                    if not header:
-                        continue
-                    clean_cols = [c.strip() for c in header]
-                    col_defs = ", ".join([f'"{c}" TEXT' for c in clean_cols])
-                    cur.execute(f'CREATE TABLE "{table_name}" ({col_defs});')
-
-                    placeholders = ", ".join(["?"] * len(clean_cols))
-                    rows = [row[: len(clean_cols)] for row in reader if row]
-                    if rows:
-                        cur.executemany(f'INSERT INTO "{table_name}" VALUES ({placeholders})', rows)
-            conn.commit()
-
-            cur.execute(sql_query)
-            cols = [d[0] for d in cur.description] if cur.description else []
-            rows = cur.fetchall() if cur.description else []
-            conn.close()
-            return cols, rows, None
-        except Exception as e:
-            try:
-                cols, rows = self.db_manager.execute_sql_query(sql_query)
-                return cols, rows, None
-            except Exception as inner_e:
-                return [], [], f"{str(e)} (fallback: {str(inner_e)})"
 
     def _generate_sql(
         self, query: str, context: PrunedSchemaContext

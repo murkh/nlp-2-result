@@ -7,6 +7,8 @@ OpenAI-compatible base URL) reused across engines, router, and ingestion.
 import logging
 from typing import Any, Optional
 
+from openai import OpenAI
+
 from src.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -21,20 +23,10 @@ class LLMUnavailableError(RuntimeError):
 def _build_client(settings: Settings) -> Optional[Any]:
     if not settings.openai_api_key:
         return None
-    try:
-        from openai import OpenAI
-
-        return OpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_api_url,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to build OpenAI client (base_url=%s, model=%s)",
-            settings.openai_api_url,
-            settings.openai_model,
-        )
-        return None
+    return OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_url,
+    )
 
 
 def get_openai_client(settings: Optional[Settings] = None) -> Optional[Any]:

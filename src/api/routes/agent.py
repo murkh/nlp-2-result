@@ -4,7 +4,8 @@ Provides the POST /query/agent endpoint executing the LangGraph multi-agent work
 """
 
 import uuid
-from typing import Any, Dict, Optional
+from fastapi import APIRouter
+
 
 from src.agent.graph import run_agent
 from src.api.schemas import (
@@ -17,28 +18,6 @@ from src.api.schemas import (
     TokenUsage,
 )
 from src.llm import LLMUnavailableError
-
-try:
-    from fastapi import APIRouter
-except ImportError:
-
-    class APIRouter:
-        def __init__(self, *args, **kwargs):
-            self.routes = []
-
-        def post(self, path, *args, **kwargs):
-            def decorator(func):
-                self.routes.append(("POST", path, func))
-                return func
-
-            return decorator
-
-        def get(self, path, *args, **kwargs):
-            def decorator(func):
-                self.routes.append(("GET", path, func))
-                return func
-
-            return decorator
 
 
 router = APIRouter(prefix="/query", tags=["Agent Orchestration"])
@@ -115,7 +94,9 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
         )
     elif intent == "AMBIGUOUS_QUERY":
         cand_str = (
-            ", ".join(candidate_datasets) if candidate_datasets else "Available knowledge datasets"
+            ", ".join(candidate_datasets)
+            if candidate_datasets
+            else "Available knowledge datasets"
         )
         steps.append(
             DecisionStep(

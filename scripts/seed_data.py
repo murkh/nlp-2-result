@@ -14,6 +14,10 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+import openpyxl
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 from src.database.connection import get_db_manager
 from src.ingestion.structured import StructuredIngestionEngine
 from src.ingestion.unstructured import UnstructuredIngestionEngine
@@ -45,7 +49,7 @@ def generate_sample_files():
             writer.writerows(sample_orders)
         print(f"Generated {orders_path}")
 
-    # 2. customers (try parquet via pyarrow/pandas, fallback to csv/json)
+    # 2. customers (parquet)
     customers_data = [
         {"customer_id": 501, "first_name": "Alice", "last_name": "Smith", "email": "alice@example.com", "country": "USA", "signup_date": "2023-01-10", "total_spent": 684.99, "is_active": True},
         {"customer_id": 502, "first_name": "Bob", "last_name": "Jones", "email": "bob@example.com", "country": "USA", "signup_date": "2023-02-14", "total_spent": 399.90, "is_active": True},
@@ -58,28 +62,10 @@ def generate_sample_files():
     ]
 
     parquet_path = SAMPLES_DIR / "customers.parquet"
-    try:
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-        table = pa.Table.from_pylist(customers_data)
-        pq.write_table(table, str(parquet_path))
-        print(f"Generated {parquet_path} via pyarrow")
-    except ImportError:
-        try:
-            import pandas as pd
-            df = pd.DataFrame(customers_data)
-            df.to_parquet(parquet_path)
-            print(f"Generated {parquet_path} via pandas")
-        except Exception:
-            # Write CSV representation if parquet library not installed
-            customers_csv = SAMPLES_DIR / "customers.csv"
-            with open(customers_csv, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(customers_data[0].keys()))
-                writer.writeheader()
-                writer.writerows(customers_data)
-            print(f"Generated {customers_csv} (fallback)")
+    pq.write_table(pa.Table.from_pylist(customers_data), str(parquet_path))
+    print(f"Generated {parquet_path}")
 
-    # 3. sales_q3.xlsx (try openpyxl / pandas, fallback to csv)
+    # 3. sales_q3.xlsx
     sales_data = [
         {"transaction_id": "TX101", "customer_id": 501, "product_name": "Wireless Noise-Canceling Headphones", "category": "Electronics", "quantity": 2, "unit_price": 124.99, "discount": 0.0, "sales_amount": 249.98, "region": "North America", "sales_rep": "Sarah Jenkins"},
         {"transaction_id": "TX102", "customer_id": 502, "product_name": "Ergonomic Mechanical Keyboard", "category": "Accessories", "quantity": 1, "unit_price": 89.50, "discount": 0.0, "sales_amount": 89.50, "region": "North America", "sales_rep": "Michael Chang"},
@@ -89,30 +75,15 @@ def generate_sample_files():
     ]
 
     excel_path = SAMPLES_DIR / "sales_q3.xlsx"
-    try:
-        import openpyxl
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Q3_Sales"
-        headers = list(sales_data[0].keys())
-        ws.append(headers)
-        for r in sales_data:
-            ws.append([r[k] for k in headers])
-        wb.save(excel_path)
-        print(f"Generated {excel_path} via openpyxl")
-    except ImportError:
-        try:
-            import pandas as pd
-            df = pd.DataFrame(sales_data)
-            df.to_excel(excel_path, index=False)
-            print(f"Generated {excel_path} via pandas")
-        except Exception:
-            sales_csv = SAMPLES_DIR / "sales_q3.csv"
-            with open(sales_csv, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(sales_data[0].keys()))
-                writer.writeheader()
-                writer.writerows(sales_data)
-            print(f"Generated {sales_csv} (fallback)")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Q3_Sales"
+    headers = list(sales_data[0].keys())
+    ws.append(headers)
+    for r in sales_data:
+        ws.append([r[k] for k in headers])
+    wb.save(excel_path)
+    print(f"Generated {excel_path}")
 
 
 def seed_all_datasets():

@@ -7,36 +7,12 @@ and dataset catalog listing.
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+
 from src.api.schemas import DatasetListResponse, IngestResponse
 from src.database.connection import DatabaseManager, get_db_manager
 from src.ingestion.structured import StructuredIngestionEngine
 from src.ingestion.unstructured import UnstructuredIngestionEngine
-
-try:
-    from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
-
-    _has_fastapi = True
-except ImportError:
-    _has_fastapi = False
-
-    class APIRouter:
-        def __init__(self, *args, **kwargs):
-            self.routes = []
-
-        def post(self, path, *args, **kwargs):
-            def decorator(func):
-                self.routes.append(("POST", path, func))
-                return func
-
-            return decorator
-
-        def get(self, path, *args, **kwargs):
-            def decorator(func):
-                self.routes.append(("GET", path, func))
-                return func
-
-            return decorator
-
 
 router = APIRouter(tags=["Ingestion"])
 
@@ -124,7 +100,5 @@ async def get_dataset_endpoint(dataset_id: str) -> Dict[str, Any]:
     db_manager = get_db_manager()
     ds = db_manager.get_dataset(dataset_id)
     if not ds:
-        if _has_fastapi:
-            raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
-        raise FileNotFoundError(f"Dataset '{dataset_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     return ds.to_dict()

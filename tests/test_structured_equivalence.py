@@ -12,7 +12,8 @@ Verifies:
 
 import unittest
 
-from src.evaluation.compat import np, pd
+import numpy as np
+import pandas as pd
 from src.evaluation.structured_equivalence import (
     StructuredBenchmarkResult,
     StructuredEquivalenceEvaluator,

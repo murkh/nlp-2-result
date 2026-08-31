@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.evaluation.compat import DataFrame, Series, np, pd
+import numpy as np
+import pandas as pd
+from pandas import DataFrame, Series
 from src.evaluation.ragas_suite import (
     RagasEvaluationResult,
     RagasEvaluator,

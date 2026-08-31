@@ -3,19 +3,9 @@ LangGraph Multi-Agent State and Telemetry Schema Definitions.
 """
 
 import operator
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, TypedDict, Union
 
-try:
-    from typing import Annotated
-except ImportError:
-    from typing_extensions import Annotated
-
-try:
-    from langchain_core.messages import BaseMessage
-
-    MessageItem = BaseMessage
-except ImportError:
-    MessageItem = Dict[str, Any]
+from langchain_core.messages import BaseMessage
 
 
 class TelemetryData(TypedDict, total=False):
@@ -40,7 +30,7 @@ class AgentState(TypedDict, total=False):
     # Conversational Input & Session Context
     query: str
     session_id: str
-    messages: Annotated[List[Any], operator.add]
+    messages: Annotated[List[BaseMessage], operator.add]
 
     # Routing & Intent Classification
     intent: Optional[

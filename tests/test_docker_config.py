@@ -8,12 +8,7 @@ import re
 import unittest
 from pathlib import Path
 
-try:
-    import yaml
-
-    _has_yaml = True
-except ImportError:
-    _has_yaml = False
+import yaml
 
 
 class TestDockerConfigurations(unittest.TestCase):
@@ -139,11 +134,8 @@ class TestDockerConfigurations(unittest.TestCase):
         self.assertIn("service_healthy", content)
         self.assertIn("postgres_data", content)
 
-    def test_docker_compose_yaml_parsing_if_available(self):
-        """Verify docker-compose.yml parses as valid YAML if PyYAML is installed."""
-        if not _has_yaml:
-            self.skipTest("PyYAML not installed")
-
+    def test_docker_compose_yaml_parsing(self):
+        """Verify docker-compose.yml parses as valid YAML."""
         content = self.docker_compose_file.read_text()
         data = yaml.safe_load(content)
 

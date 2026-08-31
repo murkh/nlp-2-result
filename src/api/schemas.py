@@ -1,79 +1,26 @@
 """
 Pydantic V2 Request, Response, and Metric Schemas for Multi-Agent Knowledge Base Q&A.
-Supports full Pydantic validation when installed, with stdlib dataclass fallback.
 """
 
 import json
 from typing import Any, Dict, List, Optional, Union
 
-try:
-    from pydantic import BaseModel as PydanticBaseModel
-    from pydantic import ConfigDict, Field
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ConfigDict, Field
 
-    class BaseModel(PydanticBaseModel):
-        """Base schema with Pydantic V2 configuration."""
 
-        model_config = ConfigDict(
-            populate_by_name=True,
-            arbitrary_types_allowed=True,
-            extra="allow",
-        )
+class BaseModel(PydanticBaseModel):
+    """Base schema with Pydantic V2 configuration."""
 
-        def to_dict(self) -> Dict[str, Any]:
-            """Serialize model to dictionary."""
-            return self.model_dump()
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        extra="allow",
+    )
 
-except ImportError:
-    from dataclasses import asdict, dataclass, field
-
-    def Field(
-        default=None,
-        default_factory=None,
-        description=None,
-        ge=None,
-        le=None,
-        min_length=None,
-        max_length=None,
-        **kwargs,
-    ):
-        if default_factory is not None:
-            return field(default_factory=default_factory)
-        return field(default=default)
-
-    class BaseModel:
-        """Standard library fallback dataclass-like BaseModel."""
-
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-
-        def model_dump(self, *args, **kwargs) -> Dict[str, Any]:
-            res = {}
-            for k, v in self.__dict__.items():
-                if hasattr(v, "model_dump"):
-                    res[k] = v.model_dump()
-                elif isinstance(v, list):
-                    res[k] = [
-                        item.model_dump() if hasattr(item, "model_dump") else item for item in v
-                    ]
-                elif isinstance(v, dict):
-                    res[k] = {
-                        dk: dv.model_dump() if hasattr(dv, "model_dump") else dv
-                        for dk, dv in v.items()
-                    }
-                else:
-                    res[k] = v
-            return res
-
-        def dict(self, *args, **kwargs) -> Dict[str, Any]:
-            return self.model_dump(*args, **kwargs)
-
-        def to_dict(self) -> Dict[str, Any]:
-            return self.model_dump()
-
-        def __repr__(self) -> str:
-            attrs = ", ".join(f"{k}={v!r}" for k, v in self.__dict__.items())
-            return f"{self.__class__.__name__}({attrs})"
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize model to dictionary."""
+        return self.model_dump()
 
 
 # =============================================================================

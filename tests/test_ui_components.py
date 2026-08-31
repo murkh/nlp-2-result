@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from frontend.client import BackendClient
-from src.evaluation.compat import pd
+import pandas as pd
 
 
 class TestBackendClient(unittest.TestCase):

@@ -9,19 +9,13 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from src.api.routes import agent, ingest, query
 from src.config import get_settings
 from src.database.connection import get_db_manager
 from src.storage.blob_store import get_blob_manager
-
-try:
-    from fastapi import FastAPI, status
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import JSONResponse
-
-    _has_fastapi = True
-except ImportError:
-    _has_fastapi = False
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -46,21 +40,6 @@ async def lifespan(app: Any):
 
 def create_app() -> Any:
     """Application factory for FastAPI app with middleware and routers."""
-    if not _has_fastapi:
-        # Fallback application placeholder for stdlib environments
-        class SimpleApp:
-            def __init__(self):
-                self.title = "Multi-Agent Knowledge Base Q&A Platform"
-                self.version = "0.1.0"
-
-            def get(self, *args, **kwargs):
-                return lambda f: f
-
-            def post(self, *args, **kwargs):
-                return lambda f: f
-
-        return SimpleApp()
-
     app = FastAPI(
         title="Multi-Agent Knowledge Base Q&A Platform",
         description=(

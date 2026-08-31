@@ -10,6 +10,8 @@ import uuid
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
+from langfuse import Langfuse
+
 from src.config import Settings, get_settings
 
 
@@ -293,18 +295,11 @@ class ObservabilityManager:
         self._recent_trace_ids: List[str] = []
 
         if self.enabled:
-            try:
-                from langfuse import Langfuse
-
-                self.client = Langfuse(
-                    public_key=self.public_key,
-                    secret_key=self.secret_key,
-                    host=self.host,
-                )
-            except Exception:
-                # Fallback silently to local tracing
-                self.enabled = False
-                self.client = None
+            self.client = Langfuse(
+                public_key=self.public_key,
+                secret_key=self.secret_key,
+                host=self.host,
+            )
 
     def create_trace(
         self,

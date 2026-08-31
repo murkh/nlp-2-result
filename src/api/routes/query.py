@@ -10,6 +10,8 @@ Provides dedicated endpoints for:
 
 from typing import Any, Dict, Optional
 
+from fastapi import APIRouter
+
 from src.api.schemas import (
     QueryBenchmarkRequest,
     QueryBenchmarkResponse,
@@ -28,29 +30,6 @@ from src.engines.dedicated_db import DedicatedDBEngine
 from src.engines.duckdb_engine import DuckDBQueryEngine
 from src.engines.hybrid_rag import HybridRAGEngine
 from src.engines.pandas_sandbox.engine import PandasSandboxEngine
-
-try:
-    from fastapi import APIRouter
-except ImportError:
-
-    class APIRouter:
-        def __init__(self, *args, **kwargs):
-            self.routes = []
-
-        def post(self, path, *args, **kwargs):
-            def decorator(func):
-                self.routes.append(("POST", path, func))
-                return func
-
-            return decorator
-
-        def get(self, path, *args, **kwargs):
-            def decorator(func):
-                self.routes.append(("GET", path, func))
-                return func
-
-            return decorator
-
 
 router = APIRouter(prefix="/query", tags=["Query Execution Engines"])
 

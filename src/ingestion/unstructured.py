@@ -5,12 +5,13 @@ computes dense vector embeddings, and enables hybrid RRF search.
 """
 
 import os
-import re
 import uuid
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+import docx
+from pypdf import PdfReader
 
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import Dataset, DocumentChunk
@@ -225,78 +226,52 @@ class UnstructuredIngestionEngine:
     def _parse_pdf(self, file_path: Path) -> Tuple[List[ParsedSection], int]:
         """Extract text from PDF page by page."""
         sections: List[ParsedSection] = []
-        try:
-            from pypdf import PdfReader
-
-            reader = PdfReader(str(file_path))
-            total_pages = len(reader.pages)
-            for page_idx, page in enumerate(reader.pages):
-                text = page.extract_text() or ""
-                if text.strip():
-                    sections.append(
-                        ParsedSection(
-                            content=text.strip(),
-                            page_number=page_idx + 1,
-                            section_title=f"Page {page_idx + 1}",
-                        )
+        reader = PdfReader(str(file_path))
+        total_pages = len(reader.pages)
+        for page_idx, page in enumerate(reader.pages):
+            text = page.extract_text() or ""
+            if text.strip():
+                sections.append(
+                    ParsedSection(
+                        content=text.strip(),
+                        page_number=page_idx + 1,
+                        section_title=f"Page {page_idx + 1}",
                     )
-            return sections, total_pages
-        except Exception:
-            # Basic fallback for binary PDF extraction
-            with open(file_path, "rb") as f:
-                raw_data = f.read().decode("latin-1", errors="ignore")
-            # Extract printable strings
-            clean_strings = re.findall(r"\(([\w\s.,!?-]+)\)", raw_data)
-            joined = " ".join(clean_strings) if clean_strings else raw_data[:2000]
-            return [
-                ParsedSection(content=joined, page_number=1, section_title="Extracted Document")
-            ], 1
+                )
+        return sections, total_pages
 
     def _parse_docx(self, file_path: Path) -> Tuple[List[ParsedSection], int]:
         """Extract paragraphs and headers from DOCX."""
         sections: List[ParsedSection] = []
-        try:
-            import docx
+        doc = docx.Document(str(file_path))
+        current_heading = "Introduction"
+        current_paragraphs: List[str] = []
 
-            doc = docx.Document(str(file_path))
-            current_heading = "Introduction"
-            current_paragraphs: List[str] = []
-
-            for p in doc.paragraphs:
-                text = p.text.strip()
-                if not text:
-                    continue
-                if p.style and p.style.name and p.style.name.startswith("Heading"):
-                    if current_paragraphs:
-                        sections.append(
-                            ParsedSection(
-                                content="\n\n".join(current_paragraphs),
-                                section_title=current_heading,
-                            )
+        for p in doc.paragraphs:
+            text = p.text.strip()
+            if not text:
+                continue
+            if p.style and p.style.name and p.style.name.startswith("Heading"):
+                if current_paragraphs:
+                    sections.append(
+                        ParsedSection(
+                            content="\n\n".join(current_paragraphs),
+                            section_title=current_heading,
                         )
-                        current_paragraphs = []
-                    current_heading = text
-                else:
-                    current_paragraphs.append(text)
-
-            if current_paragraphs:
-                sections.append(
-                    ParsedSection(
-                        content="\n\n".join(current_paragraphs),
-                        section_title=current_heading,
                     )
+                    current_paragraphs = []
+                current_heading = text
+            else:
+                current_paragraphs.append(text)
+
+        if current_paragraphs:
+            sections.append(
+                ParsedSection(
+                    content="\n\n".join(current_paragraphs),
+                    section_title=current_heading,
                 )
-            return sections, 1
-        except Exception:
-            # Fallback for DOCX via direct XML extraction from zip
-            try:
-                with zipfile.ZipFile(file_path) as z:
-                    xml_content = z.read("word/document.xml").decode("utf-8", errors="ignore")
-                    text_parts = re.findall(r"<w:t[^>]*>(.*?)</w:t>", xml_content)
-                    joined = " ".join(text_parts)
-                    return [ParsedSection(content=joined, section_title="Document")], 1
-            except Exception:
-                return self._parse_plain_text(file_path)
+            )
+        return sections, 1
 
     def _parse_markdown(self, file_path: Path) -> Tuple[List[ParsedSection], int]:
         """Extract header-organized sections from Markdown."""

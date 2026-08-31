@@ -12,6 +12,9 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import openpyxl
+import pyarrow.parquet as pq
+
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import ColumnMetadata, Dataset, TableMetadata
 from src.ingestion.metadata_extractor import MetadataExtractor
@@ -190,59 +193,31 @@ class StructuredIngestionEngine:
             return columns, rows
 
     def _parse_parquet(self, file_path: Path) -> Tuple[List[str], List[List[Any]]]:
-        """Parse Parquet file using pyarrow, pandas, or fastparquet."""
-        try:
-            import pyarrow.parquet as pq
-
-            table = pq.read_table(file_path)
-            columns = table.column_names
-            rows = table.to_pylist()
-            # Convert list of dicts to list of lists
-            row_lists = [[r.get(c) for c in columns] for r in rows]
-            return columns, row_lists
-        except ImportError:
-            try:
-                import pandas as pd
-
-                df = pd.read_parquet(file_path)
-                columns = list(df.columns)
-                rows = df.values.tolist()
-                return columns, rows
-            except ImportError:
-                # If pyarrow/pandas not installed, read as binary or raise informative error
-                raise RuntimeError("Parquet parsing requires pyarrow or pandas to be installed.")
+        """Parse Parquet file using pyarrow."""
+        table = pq.read_table(file_path)
+        columns = table.column_names
+        rows = table.to_pylist()
+        # Convert list of dicts to list of lists
+        return columns, [[r.get(c) for c in columns] for r in rows]
 
     def _parse_excel(self, file_path: Path) -> Tuple[List[str], List[List[Any]]]:
         """Parse Excel (.xlsx / .xls) workbook sheet."""
-        try:
-            import openpyxl
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        sheet = wb.active
+        rows_iter = sheet.iter_rows(values_only=True)
+        header_row = next(rows_iter, None)
+        if not header_row:
+            return [], []
 
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            sheet = wb.active
-            rows_iter = sheet.iter_rows(values_only=True)
-            header_row = next(rows_iter, None)
-            if not header_row:
-                return [], []
-
-            columns = [
-                str(c).strip() if c is not None else f"col_{i+1}" for i, c in enumerate(header_row)
-            ]
-            rows = []
-            for r in rows_iter:
-                if not r or all(c is None for c in r):
-                    continue
-                rows.append([self._convert_cell_value(c) for c in r[: len(columns)]])
-            return columns, rows
-        except ImportError:
-            try:
-                import pandas as pd
-
-                df = pd.read_excel(file_path)
-                columns = list(df.columns)
-                rows = df.values.tolist()
-                return columns, rows
-            except ImportError:
-                raise RuntimeError("Excel parsing requires openpyxl or pandas to be installed.")
+        columns = [
+            str(c).strip() if c is not None else f"col_{i+1}" for i, c in enumerate(header_row)
+        ]
+        rows = []
+        for r in rows_iter:
+            if not r or all(c is None for c in r):
+                continue
+            rows.append([self._convert_cell_value(c) for c in r[: len(columns)]])
+        return columns, rows
 
     def _convert_cell_value(self, val: Any) -> Any:
         """Convert string cell values to typed integers, floats, or booleans where appropriate."""

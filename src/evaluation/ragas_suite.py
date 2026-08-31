@@ -7,8 +7,8 @@ Implements the 4 core Ragas metrics:
   3. Context Precision (mean reciprocal rank / precision@k of relevant context chunks)
   4. Context Recall (proportion of ground-truth facts retrieved in contexts)
 
-Supports both official Ragas library evaluation and a high-fidelity standalone evaluation engine
-for offline, zero-dependency, and deterministic testing.
+Supports both official Ragas library evaluation (opt-in) and a standalone deterministic
+evaluation engine.
 """
 
 import math
@@ -16,7 +16,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
-from src.evaluation.compat import DataFrame, Series, np, pd
+import numpy as np
+import pandas as pd
+from pandas import DataFrame, Series
 
 # =============================================================================
 # Stopwords and Tokenization Helpers
@@ -787,26 +789,18 @@ class RagasEvaluator:
             empty_summary = {name: 0.0 for name in self.metric_names}
             return RagasEvaluationResult(summary=empty_summary, details=[])
 
-        # Optional: Try official ragas library if explicitly requested
+        # Optional: official ragas library, when explicitly requested
         if self.use_official_ragas:
-            try:
-                from datasets import Dataset
-                from ragas import evaluate as ragas_eval
+            from datasets import Dataset
+            from ragas import evaluate as ragas_eval
 
-                df = pd.DataFrame(records)
-                dataset = Dataset.from_pandas(df)
-                official_score = ragas_eval(dataset=dataset, metrics=self.metrics)
-                res_df = official_score.to_pandas()
-                summary = {
-                    col: float(res_df[col].mean())
-                    for col in res_df.columns
-                    if col in self.metric_names
-                }
-                details = res_df.to_dict(orient="records")
-                return RagasEvaluationResult(summary=summary, details=details)
-            except Exception:
-                # Seamless fallback to standalone built-in evaluation
-                pass
+            dataset = Dataset.from_pandas(pd.DataFrame(records))
+            official_score = ragas_eval(dataset=dataset, metrics=self.metrics)
+            res_df = official_score.to_pandas()
+            summary = {
+                col: float(res_df[col].mean()) for col in res_df.columns if col in self.metric_names
+            }
+            return RagasEvaluationResult(summary=summary, details=res_df.to_dict(orient="records"))
 
         details: List[Dict[str, Any]] = []
         metric_accumulators: Dict[str, List[float]] = {name: [] for name in self.metric_names}

@@ -1,6 +1,5 @@
 """
 Test fixtures and configuration for Milestone 1 unit and integration tests.
-Supports both pytest test runner and standard unittest test execution.
 """
 
 import os
@@ -9,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Generator
+
+import pytest
 
 from src.config import Settings
 from src.database.connection import DatabaseManager
@@ -26,14 +27,6 @@ os.environ["STORAGE_DIR"] = "/tmp/test_blobs_root"
 requires_llm = unittest.skipUnless(
     os.getenv("OPENAI_API_KEY"), "needs a live LLM (set OPENAI_API_KEY)"
 )
-
-# Conditional pytest import so tests run with stdlib unittest or pytest
-try:
-    import pytest
-
-    _has_pytest = True
-except ImportError:
-    _has_pytest = False
 
 
 def only_value(tabular_result):
@@ -108,78 +101,87 @@ SAMPLE_MARKDOWN_TEXT = (
     "Security-sensitive modules require an explicit sign-off from the Application Security team.\n"
 )
 
-if _has_pytest:
 
-    @pytest.fixture
-    def temp_blob_dir() -> Generator[Path, None, None]:
-        temp_dir = Path(tempfile.mkdtemp(prefix="test_blobs_"))
-        yield temp_dir
-        shutil.rmtree(temp_dir, ignore_errors=True)
+@pytest.fixture
+def temp_blob_dir() -> Generator[Path, None, None]:
+    temp_dir = Path(tempfile.mkdtemp(prefix="test_blobs_"))
+    yield temp_dir
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
-    @pytest.fixture
-    def test_db() -> DatabaseManager:
-        return DatabaseManager(in_memory=True)
 
-    @pytest.fixture
-    def blob_manager(temp_blob_dir: Path) -> BlobStorageManager:
-        return BlobStorageManager(base_path=temp_blob_dir)
+@pytest.fixture
+def test_db() -> DatabaseManager:
+    return DatabaseManager(in_memory=True)
 
-    @pytest.fixture
-    def embedding_service() -> EmbeddingService:
-        settings = Settings()
-        settings.embedding_provider = "mock"
-        return EmbeddingService(settings=settings)
 
-    @pytest.fixture
-    def metadata_extractor(embedding_service: EmbeddingService) -> MetadataExtractor:
-        return MetadataExtractor(embedding_service=embedding_service)
+@pytest.fixture
+def blob_manager(temp_blob_dir: Path) -> BlobStorageManager:
+    return BlobStorageManager(base_path=temp_blob_dir)
 
-    @pytest.fixture
-    def structured_engine(
-        test_db: DatabaseManager,
-        blob_manager: BlobStorageManager,
-        metadata_extractor: MetadataExtractor,
-    ) -> StructuredIngestionEngine:
-        return StructuredIngestionEngine(
-            db_manager=test_db,
-            blob_manager=blob_manager,
-            metadata_extractor=metadata_extractor,
-        )
 
-    @pytest.fixture
-    def unstructured_engine(
-        test_db: DatabaseManager,
-        blob_manager: BlobStorageManager,
-        embedding_service: EmbeddingService,
-    ) -> UnstructuredIngestionEngine:
-        return UnstructuredIngestionEngine(
-            db_manager=test_db,
-            blob_manager=blob_manager,
-            embedding_service=embedding_service,
-            chunk_size=400,
-            chunk_overlap=80,
-        )
+@pytest.fixture
+def embedding_service() -> EmbeddingService:
+    settings = Settings()
+    settings.embedding_provider = "mock"
+    return EmbeddingService(settings=settings)
 
-    @pytest.fixture
-    def schema_pruner(
-        test_db: DatabaseManager,
-        blob_manager: BlobStorageManager,
-        embedding_service: EmbeddingService,
-    ) -> TwoStageSchemaPruner:
-        return TwoStageSchemaPruner(
-            db_manager=test_db,
-            blob_manager=blob_manager,
-            embedding_service=embedding_service,
-        )
 
-    @pytest.fixture
-    def sample_csv_text() -> str:
-        return SAMPLE_CSV_TEXT
+@pytest.fixture
+def metadata_extractor(embedding_service: EmbeddingService) -> MetadataExtractor:
+    return MetadataExtractor(embedding_service=embedding_service)
 
-    @pytest.fixture
-    def sample_customers_csv_text() -> str:
-        return SAMPLE_CUSTOMERS_CSV_TEXT
 
-    @pytest.fixture
-    def sample_markdown_text() -> str:
-        return SAMPLE_MARKDOWN_TEXT
+@pytest.fixture
+def structured_engine(
+    test_db: DatabaseManager,
+    blob_manager: BlobStorageManager,
+    metadata_extractor: MetadataExtractor,
+) -> StructuredIngestionEngine:
+    return StructuredIngestionEngine(
+        db_manager=test_db,
+        blob_manager=blob_manager,
+        metadata_extractor=metadata_extractor,
+    )
+
+
+@pytest.fixture
+def unstructured_engine(
+    test_db: DatabaseManager,
+    blob_manager: BlobStorageManager,
+    embedding_service: EmbeddingService,
+) -> UnstructuredIngestionEngine:
+    return UnstructuredIngestionEngine(
+        db_manager=test_db,
+        blob_manager=blob_manager,
+        embedding_service=embedding_service,
+        chunk_size=400,
+        chunk_overlap=80,
+    )
+
+
+@pytest.fixture
+def schema_pruner(
+    test_db: DatabaseManager,
+    blob_manager: BlobStorageManager,
+    embedding_service: EmbeddingService,
+) -> TwoStageSchemaPruner:
+    return TwoStageSchemaPruner(
+        db_manager=test_db,
+        blob_manager=blob_manager,
+        embedding_service=embedding_service,
+    )
+
+
+@pytest.fixture
+def sample_csv_text() -> str:
+    return SAMPLE_CSV_TEXT
+
+
+@pytest.fixture
+def sample_customers_csv_text() -> str:
+    return SAMPLE_CUSTOMERS_CSV_TEXT
+
+
+@pytest.fixture
+def sample_markdown_text() -> str:
+    return SAMPLE_MARKDOWN_TEXT

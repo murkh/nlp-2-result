@@ -7,22 +7,8 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Union
 
-# Robust import of pandas / DataFrame
-try:
-    import pandas as pd
-except ImportError:
-    from src.evaluation.compat import pd
-
-# Robust import of httpx
-try:
-    import httpx
-
-    _has_httpx = True
-except ImportError:
-    import urllib.error
-    import urllib.request
-
-    _has_httpx = False
+import httpx
+import pandas as pd
 
 
 class BackendClient:
@@ -51,24 +37,14 @@ class BackendClient:
 
         last_error = None
         for attempt in range(self.max_retries):
-            if _has_httpx:
-                try:
-                    with httpx.Client(timeout=self.timeout) as client:
-                        res = client.get(url)
-                        if res.status_code == 200:
-                            return res.json()
-                        return {"error": res.text, "status_code": res.status_code}
-                except Exception as e:
-                    last_error = e
-            else:
-                req = urllib.request.Request(url, method="GET")
-                try:
-                    with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                        return json.loads(response.read().decode("utf-8"))
-                except urllib.error.HTTPError as e:
-                    return {"error": e.reason, "status_code": e.code}
-                except Exception as e:
-                    last_error = e
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    res = client.get(url)
+                    if res.status_code == 200:
+                        return res.json()
+                    return {"error": res.text, "status_code": res.status_code}
+            except Exception as e:
+                last_error = e
 
         return {
             "error": str(last_error) if last_error else "Request failed",
@@ -87,33 +63,17 @@ class BackendClient:
 
         last_error = None
         for attempt in range(self.max_retries):
-            if _has_httpx:
-                try:
-                    with httpx.Client(timeout=self.timeout) as client:
-                        if files is not None:
-                            res = client.post(url, files=files, data=data or {})
-                        else:
-                            res = client.post(url, json=json_data or {})
-                        if res.status_code in (200, 201):
-                            return res.json()
-                        return {"error": res.text, "status_code": res.status_code}
-                except Exception as e:
-                    last_error = e
-            else:
-                try:
-                    body = json.dumps(json_data or {}).encode("utf-8")
-                    req = urllib.request.Request(
-                        url,
-                        data=body,
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                        return json.loads(response.read().decode("utf-8"))
-                except urllib.error.HTTPError as e:
-                    return {"error": e.reason, "status_code": e.code}
-                except Exception as e:
-                    last_error = e
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    if files is not None:
+                        res = client.post(url, files=files, data=data or {})
+                    else:
+                        res = client.post(url, json=json_data or {})
+                    if res.status_code in (200, 201):
+                        return res.json()
+                    return {"error": res.text, "status_code": res.status_code}
+            except Exception as e:
+                last_error = e
 
         return {
             "error": str(last_error) if last_error else "Request failed",
