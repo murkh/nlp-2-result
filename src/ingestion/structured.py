@@ -127,12 +127,7 @@ class StructuredIngestionEngine:
         # 6. Bulk insert rows into dedicated table
         self.db_manager.insert_table_rows(table_name=table_name, columns=clean_columns, rows=rows)
 
-        # 7. Save metadata into catalog
-        self.db_manager.save_table_metadata(table_meta)
-        for col_meta in col_metas:
-            self.db_manager.save_column_metadata(col_meta)
-
-        # 8. Record in datasets registry
+        # 7. Record in datasets registry (must precede table_metadata: FK dependency)
         dataset_record = Dataset(
             id=d_id,
             name=human_display_name,
@@ -146,6 +141,11 @@ class StructuredIngestionEngine:
             page_count=None,
         )
         self.db_manager.save_dataset(dataset_record)
+
+        # 8. Save metadata into catalog
+        self.db_manager.save_table_metadata(table_meta)
+        for col_meta in col_metas:
+            self.db_manager.save_column_metadata(col_meta)
 
         return dataset_record
 

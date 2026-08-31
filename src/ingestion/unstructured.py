@@ -182,10 +182,7 @@ class UnstructuredIngestionEngine:
         for chunk_obj, emb in zip(chunks_to_embed, embeddings):
             chunk_obj.embedding = emb
 
-        # 5. Insert into document_chunks table
-        self.db_manager.save_document_chunks(chunks_to_embed)
-
-        # 6. Record dataset in registry
+        # 5. Record dataset in registry (must precede chunks: FK dependency)
         base_name = Path(filename).stem
         human_name = display_name or base_name.replace("_", " ").title()
         dataset_description = (
@@ -206,6 +203,9 @@ class UnstructuredIngestionEngine:
             page_count=total_pages,
         )
         self.db_manager.save_dataset(dataset_record)
+
+        # 6. Insert into document_chunks table
+        self.db_manager.save_document_chunks(chunks_to_embed)
 
         return dataset_record
 

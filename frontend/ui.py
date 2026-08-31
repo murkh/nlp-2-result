@@ -323,8 +323,8 @@ with tab_ingest:
     # Upload Section
     u_col1, u_col2 = st.columns([2, 1])
     with u_col1:
-        uploaded_file = st.file_uploader(
-            "Upload Dataset File",
+        uploaded_files = st.file_uploader(
+            "Upload Dataset Files",
             type=[
                 "csv",
                 "tsv",
@@ -339,34 +339,59 @@ with tab_ingest:
                 "md",
                 "markdown",
             ],
-            help="Supports CSV, Parquet, Excel, PDF, DOCX, TXT, MD",
+            help="Supports CSV, Parquet, Excel, PDF, DOCX, TXT, MD. Select multiple files to ingest them in one batch.",
+            accept_multiple_files=True,
         )
+    single_upload = len(uploaded_files) == 1
     with u_col2:
-        disp_name = st.text_input("Display Name (optional)", placeholder="e.g., Q3 Sales Report")
-        desc = st.text_area(
-            "Description (optional)",
-            placeholder="e.g., Regional sales transactions for 2023",
-            height=70,
-        )
+        if single_upload:
+            disp_name = st.text_input(
+                "Display Name (optional)", placeholder="e.g., Q3 Sales Report"
+            )
+            desc = st.text_area(
+                "Description (optional)",
+                placeholder="e.g., Regional sales transactions for 2023",
+                height=70,
+            )
+        else:
+            disp_name, desc = "", ""
+            st.caption(
+                "Display Name / Description apply to single-file uploads. "
+                "In a batch, each dataset is named after its filename."
+            )
 
-    if uploaded_file is not None:
-        if st.button("🚀 Ingest File", type="primary"):
-            with st.spinner(f"Ingesting {uploaded_file.name}..."):
-                file_bytes = uploaded_file.getvalue()
+    if uploaded_files:
+        if st.button(f"🚀 Ingest {len(uploaded_files)} File(s)", type="primary"):
+            results = []
+            bar = st.progress(0.0)
+            for idx, uf in enumerate(uploaded_files):
+                bar.progress(idx / len(uploaded_files), text=f"Ingesting {uf.name}...")
                 res = client.ingest_file(
-                    file_bytes=file_bytes,
-                    filename=uploaded_file.name,
-                    display_name=disp_name or uploaded_file.name,
-                    description=desc,
+                    file_bytes=uf.getvalue(),
+                    filename=uf.name,
+                    display_name=(disp_name or uf.name) if single_upload else uf.name,
+                    description=desc if single_upload else None,
                 )
-                if "error" in res:
-                    st.error(f"❌ Ingestion Failed: {res['error']}")
-                else:
-                    st.success(
-                        f"✅ Successfully ingested '{res.get('name')}' ({res.get('category')})! "
-                        f"ID: `{res.get('dataset_id')}` | Rows/Chunks: {res.get('row_count')}"
-                    )
-                    st.rerun()
+                results.append(
+                    {
+                        "File": uf.name,
+                        "Status": "❌ Failed" if "error" in res else "✅ Ingested",
+                        "Dataset ID": res.get("dataset_id", ""),
+                        "Category": res.get("category", ""),
+                        "Rows/Chunks": res.get("row_count", ""),
+                        "Error": res.get("error", ""),
+                    }
+                )
+            bar.empty()
+
+            succeeded = sum(1 for r in results if r["Status"].endswith("Ingested"))
+            failed = len(results) - succeeded
+            (st.success if failed == 0 else st.warning)(
+                f"Ingestion complete: {succeeded} succeeded, {failed} failed."
+            )
+            st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
+            if failed == 0:
+                st.rerun()
 
     st.divider()
 
