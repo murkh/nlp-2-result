@@ -34,15 +34,6 @@ async def lifespan(app: Any):
     db_mgr = get_db_manager()
     _ = get_blob_manager()
 
-    # Seed sample datasets if database catalog is empty
-    try:
-        if len(db_mgr.list_datasets()) == 0:
-            from scripts.seed_data import seed_all_datasets
-
-            seed_all_datasets()
-    except Exception as e:
-        print(f"[Lifespan] Auto-seeding notice: {e}")
-
     yield
 
 
