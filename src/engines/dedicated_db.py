@@ -16,6 +16,7 @@ from src.api.schemas import (
     ExecutionMetrics,
     QueryDedicatedDBRequest,
     QueryDedicatedDBResponse,
+    SchemaContextRef,
     TabularResult,
     ThinkingProcess,
     TokenUsage,
@@ -281,6 +282,7 @@ class DedicatedDBEngine:
             thinking_process=thinking,
             metrics=metrics,
             token_usage=token_usage,
+            schema_context=SchemaContextRef.from_pruned(pruned_context),
         )
 
     def _run_query_safe(
@@ -292,6 +294,24 @@ class DedicatedDBEngine:
             return cols, rows, None
         except Exception as e:
             return [], [], str(e)
+
+    def execute_sql(
+        self, sql: str, schema_context: Optional[Dict[str, Any]] = None
+    ) -> Tuple[List[str], List[Dict[str, Any]], Optional[str]]:
+        """
+        Run an already-generated SQL statement through the same guardrails and
+        execution path as execute_query. Used by the projection critic to re-run a
+        widened query without repeating pruning or generation.
+        """
+        is_safe, sec_err = validate_sql_security(sql)
+        if not is_safe:
+            return [], [], sec_err
+
+        sql = enforce_sql_limit(sql, max_limit=20)
+        cols, rows, err = self._run_query_safe(sql)
+        if err:
+            return [], [], err
+        return cols, [dict(zip(cols, row)) for row in rows], None
 
     def _generate_sql(
         self, query: str, context: PrunedSchemaContext
@@ -307,7 +327,12 @@ class DedicatedDBEngine:
             f"2. In a ```sql block, write ONLY the valid PostgreSQL SELECT query.\n"
             f"3. Translate every condition in the question into an explicit WHERE predicate. "
             f"Use the '-- samples:' values in the schema for exact literal spellings and casing. "
-            f"Never aggregate over the whole table when the question restricts rows."
+            f"Never aggregate over the whole table when the question restricts rows.\n"
+            f"4. Return the columns an analyst needs to verify the answer, not just the row key. "
+            f"Always project the '-- role: display' column of every entity you return an id for, "
+            f"every column you compare in WHERE or HAVING, and every measure the question compares "
+            f"or aggregates. Never return a bare id column on its own. This does not apply to a pure "
+            f"scalar aggregate (a single COUNT/SUM/AVG over the whole table)."
         )
 
         prompt_tokens = max(1, len(prompt) // 4)

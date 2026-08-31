@@ -334,7 +334,12 @@ class PandasSandboxEngine:
             f"5. Ensure `result = result.head(20)` if returning a DataFrame.\n"
             f"6. Translate every condition in the question into an explicit boolean mask filter. "
             f"Use the '-- samples:' values in the schema for exact literal spellings and casing. "
-            f"Never aggregate over the whole DataFrame when the question restricts rows."
+            f"Never aggregate over the whole DataFrame when the question restricts rows.\n"
+            f"7. Keep the columns an analyst needs to verify the answer, not just the row key. "
+            f"Always keep the '-- role: display' column of every entity you return an id for, "
+            f"every column you filter or compare on, and every measure the question compares or "
+            f"aggregates. Never return a bare id column on its own. This does not apply to a pure "
+            f"scalar aggregate over the whole DataFrame."
         )
 
         prompt_tokens = max(1, len(prompt) // 4)

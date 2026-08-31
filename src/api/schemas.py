@@ -409,6 +409,34 @@ class DatasetListResponse(BaseModel):
 # =============================================================================
 
 
+class SchemaContextRef(BaseModel):
+    """
+    The slice of the pruned schema a downstream node needs to reason about the
+    generated SQL and re-execute it. Carries no embeddings or DDL text.
+    """
+
+    table_names: List[str] = Field(default_factory=list, description="Retained table names")
+    retained_columns: Dict[str, List[str]] = Field(
+        default_factory=dict, description="table_name -> retained column names"
+    )
+    column_roles: Dict[str, str] = Field(
+        default_factory=dict, description="column_name -> 'display' | 'measure' | 'date'"
+    )
+    file_paths: Dict[str, str] = Field(
+        default_factory=dict, description="table_name -> absolute blob path"
+    )
+
+    @classmethod
+    def from_pruned(cls, context: Any) -> "SchemaContextRef":
+        """Build from a PrunedSchemaContext. Duck-typed to avoid importing src.pruning."""
+        return cls(
+            table_names=list(getattr(context, "table_names", []) or []),
+            retained_columns=dict(getattr(context, "retained_columns", {}) or {}),
+            column_roles=dict(getattr(context, "column_roles", {}) or {}),
+            file_paths=dict(getattr(context, "file_paths", {}) or {}),
+        )
+
+
 class QueryDedicatedDBResponse(BaseModel):
     """Response from Strategy A: PostgreSQL Dedicated DB Query Engine."""
 
@@ -428,6 +456,9 @@ class QueryDedicatedDBResponse(BaseModel):
         default_factory=TokenUsage, description="Token counts and estimated cost"
     )
     error: Optional[str] = Field(default=None, description="Error message if execution failed")
+    schema_context: Optional[SchemaContextRef] = Field(
+        default=None, description="Pruned schema slice for the projection critic"
+    )
 
     def __init__(
         self,
@@ -493,6 +524,9 @@ class QueryDuckDBResponse(BaseModel):
         default_factory=TokenUsage, description="Token counts and estimated cost"
     )
     error: Optional[str] = Field(default=None, description="Error message if execution failed")
+    schema_context: Optional[SchemaContextRef] = Field(
+        default=None, description="Pruned schema slice for the projection critic"
+    )
 
     def __init__(
         self,

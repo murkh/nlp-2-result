@@ -145,6 +145,22 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
                 reasoning="Executed query inside sandbox/engine and extracted structured records without mutations.",
             )
         )
+        critic = (telemetry or {}).get("projection_critic")
+        if critic:
+            added = ", ".join(critic.get("added_columns", []))
+            steps.append(
+                DecisionStep(
+                    step_number=len(steps) + 1,
+                    title="Projection Critic",
+                    choice=f"Widened projection with: {added}",
+                    reasoning=(
+                        "The initial query returned too few columns to verify the answer. "
+                        "Added the human-readable identifier, the compared columns, and the "
+                        "measures, then re-executed."
+                    ),
+                    details=critic,
+                )
+            )
     elif intent == "UNSTRUCTURED_QUERY":
         steps.append(
             DecisionStep(

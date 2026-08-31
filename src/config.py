@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
+    # Projection Critic
+    # Widening a SELECT list against a given DDL is a small task, so it can run on a
+    # cheaper/faster model than the main generator. None falls back to openai_model,
+    # which keeps the feature safe behind an OpenAI-compatible gateway (bedrock-mantle)
+    # that only serves a specific set of model ids.
+    critic_model: Optional[str] = Field(default=None, alias="CRITIC_MODEL")
+    projection_critic_enabled: bool = Field(default=True, alias="PROJECTION_CRITIC_ENABLED")
+
     # Code Execution & Sandbox Security Limits
     sandbox_max_memory_mb: int = Field(default=512, alias="SANDBOX_MAX_MEMORY_MB")
     sandbox_timeout_sec: float = Field(default=5.0, alias="SANDBOX_TIMEOUT_SEC")

@@ -20,6 +20,7 @@ class TelemetryData(TypedDict, total=False):
     latency_ms: float
     execution_success: bool
     error: Optional[str]
+    projection_critic: Dict[str, Any]
 
 
 class AgentState(TypedDict, total=False):
@@ -42,7 +43,8 @@ class AgentState(TypedDict, total=False):
 
     # Schema & Dataset Context
     candidate_datasets: List[str]
-    pruned_tables: List[Dict[str, Any]]
+    # Pruned schema slice (SchemaContextRef) the projection critic reasons over.
+    pruned_tables: Dict[str, Any]
     retrieved_chunks: List[Dict[str, Any]]
 
     # Execution Artifacts

@@ -20,6 +20,7 @@ from src.api.schemas import (
     ExecutionMetrics,
     QueryDuckDBRequest,
     QueryDuckDBResponse,
+    SchemaContextRef,
     TabularResult,
     ThinkingProcess,
     TokenUsage,
@@ -285,6 +286,7 @@ class DuckDBQueryEngine:
             thinking_process=thinking,
             metrics=metrics,
             token_usage=token_usage,
+            schema_context=SchemaContextRef.from_pruned(pruned_context),
         )
 
     def _execute_duckdb_views(
@@ -324,6 +326,28 @@ class DuckDBQueryEngine:
         except Exception as e:
             return [], [], str(e)
 
+    def execute_sql(
+        self, sql: str, schema_context: Optional[Dict[str, Any]] = None
+    ) -> Tuple[List[str], List[Dict[str, Any]], Optional[str]]:
+        """
+        Run an already-generated SQL statement through the same guardrails and view
+        registration as execute_query. Used by the projection critic to re-run a
+        widened query without repeating pruning or generation.
+        """
+        is_safe, sec_err = validate_duckdb_security(sql)
+        if not is_safe:
+            return [], [], sec_err
+
+        file_paths = (schema_context or {}).get("file_paths") or {}
+        if not file_paths:
+            return [], [], "No blob file paths available to register views"
+
+        sql = enforce_duckdb_limit(sql, max_limit=20)
+        cols, rows, err = self._execute_duckdb_views(sql, file_paths)
+        if err:
+            return [], [], err
+        return cols, [dict(zip(cols, row)) for row in rows], None
+
     def _generate_sql(
         self, query: str, context: PrunedSchemaContext
     ) -> Tuple[str, Optional[str], Tuple[int, int]]:
@@ -338,7 +362,12 @@ class DuckDBQueryEngine:
             f"2. In a ```sql block, write ONLY the valid DuckDB SQL query.\n"
             f"3. Translate every condition in the question into an explicit WHERE predicate. "
             f"Use the '-- samples:' values in the schema for exact literal spellings and casing. "
-            f"Never aggregate over the whole view when the question restricts rows."
+            f"Never aggregate over the whole view when the question restricts rows.\n"
+            f"4. Return the columns an analyst needs to verify the answer, not just the row key. "
+            f"Always project the '-- role: display' column of every entity you return an id for, "
+            f"every column you compare in WHERE or HAVING, and every measure the question compares "
+            f"or aggregates. Never return a bare id column on its own. This does not apply to a pure "
+            f"scalar aggregate (a single COUNT/SUM/AVG over the whole view)."
         )
 
         prompt_tokens = max(1, len(prompt) // 4)

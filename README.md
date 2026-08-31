@@ -81,6 +81,23 @@ LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
 ```
 
+#### Projection Critic
+Guards against answers that return only a row key. A deterministic gate checks whether the
+generated SQL projects the columns an analyst needs to verify the result — the entity's
+human-readable identifier, the columns being compared, and the measures. When the projection is
+already adequate the node makes **no LLM call and no second query**; only a thin projection is
+sent for widening.
+
+```bash
+PROJECTION_CRITIC_ENABLED=true  # set false to disable the node entirely
+CRITIC_MODEL=                   # empty = reuse OPENAI_MODEL
+```
+
+Widening a SELECT list against a given DDL is a small task, so `CRITIC_MODEL` can point at a
+cheaper/faster model than `OPENAI_MODEL`. It must be a model id your gateway actually serves —
+behind bedrock-mantle that is a Bedrock model id, not an OpenAI one. Leaving it empty reuses
+`OPENAI_MODEL`, which always works.
+
 #### Embeddings
 Defaults need no API key: `fastembed` runs `BAAI/bge-small-en-v1.5` (384-dim) locally on ONNX
 Runtime. The model (~130MB) is downloaded from HuggingFace on first use and cached — in Docker on

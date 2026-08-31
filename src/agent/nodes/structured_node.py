@@ -41,6 +41,7 @@ def structured_node(state: AgentState) -> Dict[str, Any]:
         prompt_tokens = 0
         completion_tokens = 0
         raw_answer = ""
+        schema_context: Dict[str, Any] = {}
 
         try:
             if strategy == "dedicated_db":
@@ -54,6 +55,8 @@ def structured_node(state: AgentState) -> Dict[str, Any]:
                 execution_error = res.error
                 prompt_tokens = res.token_usage.prompt_tokens
                 completion_tokens = res.token_usage.completion_tokens
+                if res.schema_context:
+                    schema_context = res.schema_context.model_dump()
 
             elif strategy == "pandas_sandbox":
                 engine = PandasSandboxEngine(db_manager=db_manager)
@@ -79,6 +82,8 @@ def structured_node(state: AgentState) -> Dict[str, Any]:
                 execution_error = res.error
                 prompt_tokens = res.token_usage.prompt_tokens
                 completion_tokens = res.token_usage.completion_tokens
+                if res.schema_context:
+                    schema_context = res.schema_context.model_dump()
 
             span.record_tokens(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
             span.end(output_data={"rows_count": len(execution_result), "error": execution_error})
@@ -106,6 +111,7 @@ def structured_node(state: AgentState) -> Dict[str, Any]:
 
         return {
             "suggested_strategy": strategy,
+            "pruned_tables": schema_context,
             "generated_code": generated_code,
             "execution_result": execution_result,
             "execution_columns": execution_columns,

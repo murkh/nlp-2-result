@@ -4,6 +4,7 @@ Reduces prompt token consumption by >85% via Stage 1 table vector retrieval
 and Stage 2 column vector retrieval with compulsory PK/FK preservation and LIMIT 20 enforcement.
 """
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,6 +13,50 @@ from src.config import Settings, get_settings
 from src.database.connection import DatabaseManager, get_db_manager
 from src.ingestion.metadata_extractor import EmbeddingService
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
+
+# Column role heuristics. An id alone is not an answer an analyst can act on, so
+# the human-readable identifier and the measures are marked and preserved.
+DISPLAY_NAME_PATTERN = re.compile(
+    r"(^|_)(no|num|number|code|name|title|label|desc|description|status|type)(_|$)"
+)
+MEASURE_NAME_PATTERN = re.compile(
+    r"(^|_)(amount|amt|value|val|total|sum|qty|quantity|price|cost|rate|balance|discount|tax)(_|$)"
+)
+DATE_NAME_PATTERN = re.compile(r"(^|_)(date|time|timestamp|dt|day|month|year)(_|$)")
+
+_TEXT_TYPES = ("char", "text", "string", "object", "uuid")
+_NUMERIC_TYPES = ("int", "float", "double", "decimal", "numeric", "real", "number", "money")
+_DATE_TYPES = ("date", "time", "timestamp")
+
+# Bounded, unlike the unconditional PK/FK bypass: a wide fact table must not be
+# able to blow the whole token budget on measures.
+MAX_DISPLAY_BYPASS_PER_TABLE = 2
+MAX_MEASURE_BYPASS_PER_TABLE = 3
+
+
+def classify_column_role(column_name: str, data_type: str) -> Optional[str]:
+    """
+    Classify a column as 'display', 'measure', or 'date' from its name and type.
+
+    Generalizes the key-column heuristic in MetadataExtractor.profile_table, which
+    computed the same intuition (name/amount/date) only to discard it after
+    building a prose description.
+    """
+    name = (column_name or "").lower()
+    dtype = (data_type or "").lower()
+
+    is_text = any(t in dtype for t in _TEXT_TYPES)
+    is_numeric = any(t in dtype for t in _NUMERIC_TYPES)
+    is_date = any(t in dtype for t in _DATE_TYPES)
+
+    if is_date or (DATE_NAME_PATTERN.search(name) and not is_numeric):
+        return "date"
+    if is_numeric and MEASURE_NAME_PATTERN.search(name):
+        return "measure"
+    # Untyped/unknown columns fall back to the name alone rather than being skipped.
+    if DISPLAY_NAME_PATTERN.search(name) and (is_text or not is_numeric):
+        return "display"
+    return None
 
 
 @dataclass
@@ -24,6 +69,7 @@ class PrunedColumn:
     is_foreign_key: bool
     sample_values: List[Any]
     description: str
+    role: Optional[str] = None
 
 
 @dataclass
@@ -50,6 +96,7 @@ class PrunedSchemaContext:
     token_count_pruned: int
     token_count_full: int
     token_savings_percent: float
+    column_roles: Dict[str, str] = field(default_factory=dict)  # column_name -> role
 
 
 def estimate_token_count(text: str) -> int:
@@ -162,6 +209,9 @@ class TwoStageSchemaPruner:
         # Group and prune columns per table
         total_retained_cols = 0
         cols_by_table: Dict[str, List[PrunedColumn]] = {tid: [] for tid in selected_table_ids}
+        role_bypass_used: Dict[str, Dict[str, int]] = {
+            tid: {"display": 0, "measure": 0} for tid in selected_table_ids
+        }
 
         for crow in col_rows:
             tid = crow["table_id"]
@@ -169,12 +219,23 @@ class TwoStageSchemaPruner:
                 continue
 
             is_key = crow["is_primary_key"] or crow["is_foreign_key"]
+            role = classify_column_role(crow["column_name"], crow["data_type"])
             current_table_col_count = len(cols_by_table[tid])
+            within_budget = current_table_col_count < cols_per_table and total_retained_cols < max_cols
 
-            # Retain column if within table limit and global limit, OR if it is a PK/FK
-            if (
-                current_table_col_count < cols_per_table and total_retained_cols < max_cols
-            ) or is_key:
+            # A PK/FK bypasses the budget unconditionally. A display/measure column
+            # bypasses it too, but only up to a per-table bound: without this, the id
+            # survives pruning while the column that makes it readable does not.
+            role_bypass = False
+            if not within_budget and not is_key and role in ("display", "measure"):
+                limit = (
+                    MAX_DISPLAY_BYPASS_PER_TABLE
+                    if role == "display"
+                    else MAX_MEASURE_BYPASS_PER_TABLE
+                )
+                role_bypass = role_bypass_used[tid][role] < limit
+
+            if within_budget or is_key or role_bypass:
                 p_col = PrunedColumn(
                     column_name=crow["column_name"],
                     data_type=crow["data_type"],
@@ -182,9 +243,12 @@ class TwoStageSchemaPruner:
                     is_foreign_key=crow["is_foreign_key"],
                     sample_values=crow["sample_values"][:3] if crow["sample_values"] else [],
                     description=crow["description"],
+                    role=role,
                 )
                 cols_by_table[tid].append(p_col)
                 total_retained_cols += 1
+                if role_bypass:
+                    role_bypass_used[tid][role] += 1
 
         for tid, cols in cols_by_table.items():
             table_map[tid].columns = cols
@@ -206,6 +270,9 @@ class TwoStageSchemaPruner:
         retained_columns = {
             t.table_name: [c.column_name for c in t.columns] for t in table_map.values()
         }
+        column_roles = {
+            c.column_name: c.role for t in table_map.values() for c in t.columns if c.role
+        }
 
         return PrunedSchemaContext(
             table_names=table_names,
@@ -216,6 +283,7 @@ class TwoStageSchemaPruner:
             token_count_pruned=token_pruned,
             token_count_full=token_full,
             token_savings_percent=savings_percent,
+            column_roles=column_roles,
         )
 
     def _build_pruned_ddl_prompt(self, tables: List[PrunedTable]) -> str:
@@ -246,8 +314,10 @@ class TwoStageSchemaPruner:
                     if col.sample_values and not col.is_foreign_key
                     else ""
                 )
+                role_str = f" -- role: {col.role}" if col.role else ""
                 col_defs.append(
-                    f"    {col.column_name} {col.data_type}{pk_flag},{fk_flag}{samples_str}"
+                    f"    {col.column_name} {col.data_type}{pk_flag},"
+                    f"{fk_flag}{role_str}{samples_str}"
                 )
 
             if not col_defs:

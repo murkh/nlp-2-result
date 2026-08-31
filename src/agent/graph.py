@@ -3,7 +3,7 @@ LangGraph Multi-Agent StateGraph Workflow Compiler.
 Defines the multi-agent graph with supervisor routing across 4 intent branches:
 1. GREETING_OR_CHITCHAT -> chitchat_node -> END
 2. AMBIGUOUS_QUERY -> clarify_node -> END
-3. STRUCTURED_QUERY -> structured_node -> synthesizer_node -> END
+3. STRUCTURED_QUERY -> structured_node -> projection_critic -> synthesizer_node -> END
 4. UNSTRUCTURED_QUERY -> unstructured_node -> synthesizer_node -> END
 """
 
@@ -14,6 +14,7 @@ from langgraph.graph import END, StateGraph
 
 from src.agent.nodes.chitchat_node import chitchat_node
 from src.agent.nodes.clarify_node import clarify_node
+from src.agent.nodes.projection_critic import projection_critic_node
 from src.agent.nodes.router_node import supervisor_router_node
 from src.agent.nodes.structured_node import structured_node
 from src.agent.nodes.synthesizer_node import synthesizer_node
@@ -48,6 +49,7 @@ def build_multi_agent_graph() -> Any:
     workflow.add_node("chitchat", chitchat_node)
     workflow.add_node("clarification", clarify_node)
     workflow.add_node("structured_agent", structured_node)
+    workflow.add_node("projection_critic", projection_critic_node)
     workflow.add_node("unstructured_agent", unstructured_node)
     workflow.add_node("synthesizer", synthesizer_node)
 
@@ -69,7 +71,8 @@ def build_multi_agent_graph() -> Any:
     # Add Execution Edges
     workflow.add_edge("chitchat", END)
     workflow.add_edge("clarification", END)
-    workflow.add_edge("structured_agent", "synthesizer")
+    workflow.add_edge("structured_agent", "projection_critic")
+    workflow.add_edge("projection_critic", "synthesizer")
     workflow.add_edge("unstructured_agent", "synthesizer")
     workflow.add_edge("synthesizer", END)
 
@@ -106,7 +109,7 @@ def run_agent(
         "routing_reason": "",
         "suggested_strategy": suggested_strategy,
         "candidate_datasets": dataset_ids or [],
-        "pruned_tables": [],
+        "pruned_tables": {},
         "retrieved_chunks": [],
         "generated_code": None,
         "execution_result": [],
