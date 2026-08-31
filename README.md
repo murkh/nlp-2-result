@@ -73,6 +73,9 @@ Create a `.env` file in the root directory:
 ```bash
 OPENAI_API_KEY=sk-your-openai-api-key
 
+# Optional OpenAI-compatible gateway base URL (e.g. bedrock-mantle)
+OPENAI_API_URL=
+
 # Optional Langfuse tracing keys (leave empty to use in-memory tracing)
 LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import Settings, get_settings
 from src.database.models import ColumnMetadata, TableMetadata
+from src.llm import get_openai_client
 
 # =============================================================================
 # Embedding Service (Mock, OpenAI, FastEmbed)
@@ -41,12 +42,9 @@ class EmbeddingService:
             except Exception:
                 self.provider = "mock"
 
-        elif self.provider == "openai" and self.settings.openai_api_key:
-            try:
-                from openai import OpenAI
-
-                self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
-            except Exception:
+        elif self.provider == "openai":
+            self._openai_client = get_openai_client(self.settings)
+            if self._openai_client is None:
                 self.provider = "mock"
 
     def embed_text(self, text: str) -> List[float]:

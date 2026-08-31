@@ -22,6 +22,7 @@ from src.api.schemas import (
 from src.config import Settings, get_settings
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import QueryLog
+from src.llm import get_openai_client
 from src.pruning.schema_pruner import PrunedSchemaContext, TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
 
@@ -84,15 +85,7 @@ class DedicatedDBEngine:
             db_manager=self.db_manager, blob_manager=self.blob_manager
         )
         self.settings = settings or get_settings()
-        self._openai_client = None
-
-        if self.settings.openai_api_key:
-            try:
-                from openai import OpenAI
-
-                self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
-            except Exception:
-                self._openai_client = None
+        self._openai_client = get_openai_client(self.settings)
 
     def execute_query(
         self,

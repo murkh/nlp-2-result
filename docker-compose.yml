@@ -36,6 +36,7 @@ services:
       DATABASE_URL_SYNC: postgresql://postgres:postgrespassword@postgres:5432/knowledge_base
       STORAGE_DIR: /app/data/blob
       OPENAI_API_KEY: ${OPENAI_API_KEY:-mock-key}
+      OPENAI_API_URL: ${OPENAI_API_URL:-}
       LANGFUSE_HOST: http://langfuse:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}

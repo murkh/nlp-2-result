@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from src.api.schemas import BaseModel, Field
 from src.config import Settings, get_settings
 from src.database.connection import DatabaseManager, get_db_manager
+from src.llm import get_openai_client
 
 
 class SupervisorDecision(BaseModel):
@@ -178,14 +179,7 @@ class SupervisorRouter:
     ):
         self.db_manager = db_manager or get_db_manager()
         self.settings = settings or get_settings()
-        self._openai_client = None
-        if self.settings.openai_api_key:
-            try:
-                from openai import OpenAI
-
-                self._openai_client = OpenAI(api_key=self.settings.openai_api_key)
-            except Exception:
-                pass
+        self._openai_client = get_openai_client(self.settings)
 
     def classify_intent(self, query: str, session_id: Optional[str] = None) -> SupervisorDecision:
         """

@@ -65,6 +65,7 @@ try:
 
         # LLM & Reasoning Configuration
         openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+        openai_api_url: Optional[str] = Field(default=None, alias="OPENAI_API_URL")
         openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
         llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
@@ -74,14 +75,22 @@ try:
 
         # Two-Stage Schema Pruning Limits
         default_top_k_tables: int = Field(default=3, alias="DEFAULT_TOP_K_TABLES")
-        default_max_cols_per_table: int = Field(default=8, alias="DEFAULT_MAX_COLS_PER_TABLE")
+        default_max_cols_per_table: int = Field(
+            default=8, alias="DEFAULT_MAX_COLS_PER_TABLE"
+        )
         default_total_max_cols: int = Field(default=20, alias="DEFAULT_TOTAL_MAX_COLS")
 
         # Observability (Langfuse)
         langfuse_enabled: bool = Field(default=False, alias="LANGFUSE_ENABLED")
-        langfuse_public_key: Optional[str] = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
-        langfuse_secret_key: Optional[str] = Field(default=None, alias="LANGFUSE_SECRET_KEY")
-        langfuse_host: str = Field(default="https://cloud.langfuse.com", alias="LANGFUSE_HOST")
+        langfuse_public_key: Optional[str] = Field(
+            default=None, alias="LANGFUSE_PUBLIC_KEY"
+        )
+        langfuse_secret_key: Optional[str] = Field(
+            default=None, alias="LANGFUSE_SECRET_KEY"
+        )
+        langfuse_host: str = Field(
+            default="https://cloud.langfuse.com", alias="LANGFUSE_HOST"
+        )
 
 except ImportError:
     # Standard library fallback when pydantic-settings is not installed
@@ -112,27 +121,42 @@ except ImportError:
             )
 
             self.embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "mock")
-            self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+            self.embedding_model: str = os.getenv(
+                "EMBEDDING_MODEL", "text-embedding-3-small"
+            )
             self.embedding_dim: int = int(os.getenv("EMBEDDING_DIM", "1536"))
 
             self.openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
+            self.openai_api_url: Optional[str] = os.getenv("OPENAI_API_URL")
             self.openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
             self.llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.0"))
 
-            self.sandbox_max_memory_mb: int = int(os.getenv("SANDBOX_MAX_MEMORY_MB", "512"))
-            self.sandbox_timeout_sec: float = float(os.getenv("SANDBOX_TIMEOUT_SEC", "5.0"))
+            self.sandbox_max_memory_mb: int = int(
+                os.getenv("SANDBOX_MAX_MEMORY_MB", "512")
+            )
+            self.sandbox_timeout_sec: float = float(
+                os.getenv("SANDBOX_TIMEOUT_SEC", "5.0")
+            )
 
             self.default_top_k_tables: int = int(os.getenv("DEFAULT_TOP_K_TABLES", "3"))
-            self.default_max_cols_per_table: int = int(os.getenv("DEFAULT_MAX_COLS_PER_TABLE", "8"))
-            self.default_total_max_cols: int = int(os.getenv("DEFAULT_TOTAL_MAX_COLS", "20"))
+            self.default_max_cols_per_table: int = int(
+                os.getenv("DEFAULT_MAX_COLS_PER_TABLE", "8")
+            )
+            self.default_total_max_cols: int = int(
+                os.getenv("DEFAULT_TOTAL_MAX_COLS", "20")
+            )
 
-            self.langfuse_enabled: bool = os.getenv("LANGFUSE_ENABLED", "false").lower() in (
+            self.langfuse_enabled: bool = os.getenv(
+                "LANGFUSE_ENABLED", "false"
+            ).lower() in (
                 "true",
                 "1",
             )
             self.langfuse_public_key: Optional[str] = os.getenv("LANGFUSE_PUBLIC_KEY")
             self.langfuse_secret_key: Optional[str] = os.getenv("LANGFUSE_SECRET_KEY")
-            self.langfuse_host: str = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+            self.langfuse_host: str = os.getenv(
+                "LANGFUSE_HOST", "https://cloud.langfuse.com"
+            )
 
 
 @lru_cache
