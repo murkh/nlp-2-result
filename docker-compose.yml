@@ -39,6 +39,11 @@ services:
       BLOB_STORAGE_PATH: /app/data/blob
       OPENAI_API_KEY: ${OPENAI_API_KEY:-mock-key}
       OPENAI_API_URL: ${OPENAI_API_URL:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fastembed}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
+      # Cached on a named volume so the HuggingFace model downloads only once
+      FASTEMBED_CACHE_PATH: /app/.cache/fastembed
       LANGFUSE_HOST: http://langfuse:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
@@ -47,6 +52,7 @@ services:
     volumes:
       - ./data/blob:/app/data/blob
       - ./data/db:/app/data/db
+      - fastembed_cache:/app/.cache/fastembed
     networks:
       - nlp_network
     healthcheck:
@@ -100,3 +106,4 @@ networks:
 
 volumes:
   postgres_data:
+  fastembed_cache:

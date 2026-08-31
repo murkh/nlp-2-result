@@ -451,7 +451,7 @@ class TestAdversarialMilestone1(unittest.TestCase):
         Adversarial Stress Test: Large document (>120,000 characters) across 20 distinct chapters.
         Verifies:
         1. Recursive chunking cleanly produces chunks without crash or TLE.
-        2. All chunks receive valid token/char counts and 1536-dim vector embeddings.
+        2. All chunks receive valid token/char counts and vector embeddings.
         3. Hybrid search (dense + BM25 sparse RRF) successfully retrieves target sections.
         """
         chapters = []

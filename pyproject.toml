@@ -79,6 +79,9 @@ addopts = "-ra -q --import-mode=importlib"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
+markers = [
+    "network: requires network access (downloads the embedding model on first run)",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",

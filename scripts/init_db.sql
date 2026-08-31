@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_datasets_file_type ON datasets(file_type);
 
 -- -----------------------------------------------------------------------------
 -- 2. Structured Table Metadata (Stage 1 Schema Pruning)
--- Stores table-level summaries, statistics, and 1536-dim vector embeddings
+-- Stores table-level summaries, statistics, and 384-dim vector embeddings
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS table_metadata (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS table_metadata (
     description TEXT NOT NULL,
     row_count BIGINT NOT NULL DEFAULT 0,
     column_count INTEGER NOT NULL DEFAULT 0,
-    embedding vector(1536),
+    embedding vector(384),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS column_metadata (
     distinct_values_count BIGINT DEFAULT 0,
     sample_values JSONB NOT NULL DEFAULT '[]'::jsonb,
     description TEXT NOT NULL,
-    embedding vector(1536),
+    embedding vector(384),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_table_column UNIQUE (table_id, column_name)
 );
@@ -94,7 +94,7 @@ ON column_metadata(table_id, is_primary_key, is_foreign_key);
 
 -- -----------------------------------------------------------------------------
 -- 4. Unstructured Document Chunks (Hybrid Dense + Sparse Search)
--- Stores text chunks with 1536-dim vector embeddings and stored tsvectors
+-- Stores text chunks with 384-dim vector embeddings and stored tsvectors
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS document_chunks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     content TEXT NOT NULL,
     token_count INTEGER NOT NULL,
     char_count INTEGER NOT NULL,
-    embedding vector(1536),
+    embedding vector(384),
     content_tsvector tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

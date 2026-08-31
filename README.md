@@ -81,6 +81,24 @@ LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
 ```
 
+#### Embeddings
+Defaults need no API key: `fastembed` runs `BAAI/bge-small-en-v1.5` (384-dim) locally on ONNX
+Runtime. The model (~130MB) is downloaded from HuggingFace on first use and cached — in Docker on
+the `fastembed_cache` volume, so it downloads once.
+
+```bash
+EMBEDDING_PROVIDER=fastembed   # fastembed (default) | openai | mock
+EMBEDDING_MODEL=               # empty = provider default (bge-small-en-v1.5 / text-embedding-3-small)
+EMBEDDING_DIM=384              # must match the model AND vector(N) in scripts/init_db.sql
+```
+
+`mock` yields deterministic hash-projection vectors for offline runs and the test suite — it does
+**not** retrieve semantically. A provider that fails to initialise now raises instead of silently
+falling back to `mock`.
+
+Changing `EMBEDDING_DIM` means editing `vector(384)` in `scripts/init_db.sql` and recreating the
+database (`docker compose down -v`), then re-ingesting.
+
 ### 2. Start Full Stack
 ```bash
 docker-compose up --build -d

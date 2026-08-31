@@ -339,7 +339,7 @@ class TestFeature3MetadataAndVectorCatalog:
         desc = "Table containing regional sales orders and quantities."
         vec = mock_embeddings.embed_text(desc)
 
-        assert len(vec) == 1536
+        assert len(vec) == mock_embeddings.dim
         test_db.execute(
             "INSERT INTO table_metadata (id, dataset_id, table_name, display_name, description, row_count, column_count, embedding) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -349,7 +349,7 @@ class TestFeature3MetadataAndVectorCatalog:
         row = test_db.fetchone("SELECT * FROM table_metadata WHERE id = ?", (table_id,))
         assert row["table_name"] == "tbl_sales"
         loaded_vec = json.loads(row["embedding"])
-        assert len(loaded_vec) == 1536
+        assert len(loaded_vec) == mock_embeddings.dim
 
     def test_f03_column_metadata_type_and_stats_profiling(
         self, sample_data_dir, mock_embeddings, test_db
@@ -410,7 +410,7 @@ class TestFeature3MetadataAndVectorCatalog:
         )
 
         row = test_db.fetchone("SELECT * FROM document_chunks WHERE dataset_id = ?", (dataset_id,))
-        assert len(json.loads(row["embedding"])) == 1536
+        assert len(json.loads(row["embedding"])) == mock_embeddings.dim
 
     def test_f03_vector_catalog_cosine_similarity_search(self, mock_embeddings):
         doc1 = "Quarterly revenue report for enterprise customers"

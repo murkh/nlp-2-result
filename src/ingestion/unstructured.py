@@ -133,7 +133,7 @@ class UnstructuredIngestionEngine:
         1. Persist raw file in Blob Storage
         2. Parse pages/sections (PDF, DOCX, MD, TXT)
         3. Recursively chunk text (800 chars / 150 overlap) with page and section metadata
-        4. Compute 1536-dim vector embeddings
+        4. Compute vector embeddings
         5. Bulk insert document chunks into document_chunks table
         6. Record in datasets registry
         """

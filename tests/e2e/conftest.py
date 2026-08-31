@@ -18,18 +18,24 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.config import get_settings
 
 # -----------------------------------------------------------------------------
-# Mock Vector Embedding Generator (1536-dim deterministic vectors)
+# Mock Vector Embedding Generator (EMBEDDING_DIM-wide deterministic vectors)
 # -----------------------------------------------------------------------------
+EMBEDDING_DIM = get_settings().embedding_dim
+
+
 class MockEmbeddingProvider:
-    """Generates deterministic 1536-dimensional float vectors based on text hash."""
+    """Generates deterministic float vectors of EMBEDDING_DIM width from a text hash."""
+
+    dim = EMBEDDING_DIM
 
     @staticmethod
     def embed_text(text: str) -> List[float]:
         seed = sum(ord(c) for c in text) % (2**32)
         rng = np.random.RandomState(seed)
-        vec = rng.randn(1536).astype(np.float32)
+        vec = rng.randn(EMBEDDING_DIM).astype(np.float32)
         norm = np.linalg.norm(vec)
         if norm > 0:
             vec = vec / norm

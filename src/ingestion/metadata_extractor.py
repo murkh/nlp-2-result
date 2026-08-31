@@ -1,7 +1,7 @@
 """
 Metadata Extractor and Profiling Module for Structured and Unstructured Datasets.
 Extracts column statistics, sample values, primary/foreign key relationships,
-synthesizes semantic descriptions, and generates 1536-dim vector embeddings.
+synthesizes semantic descriptions, and generates vector embeddings.
 """
 
 import hashlib
@@ -17,20 +17,28 @@ from src.database.models import ColumnMetadata, TableMetadata
 from src.llm import get_openai_client
 
 # =============================================================================
-# Embedding Service (Mock, OpenAI, FastEmbed)
+# Embedding Service (FastEmbed, OpenAI, Mock)
 # =============================================================================
+
+# Model used when EMBEDDING_MODEL is unset. The FastEmbed default is a HuggingFace
+# model downloaded and cached locally on first use (384-dim, no API key needed).
+DEFAULT_EMBEDDING_MODELS = {
+    "fastembed": "BAAI/bge-small-en-v1.5",
+    "openai": "text-embedding-3-small",
+}
 
 
 class EmbeddingService:
     """
-    Unified embedding service supporting OpenAI text-embedding-3-small,
-    FastEmbed (local ONNX model), and deterministic token-projection Mock embeddings.
+    Unified embedding service supporting FastEmbed (local HuggingFace ONNX model),
+    OpenAI text-embedding-3-small, and deterministic token-projection Mock embeddings.
     """
 
     def __init__(self, settings: Optional[Settings] = None):
         self.settings = settings or get_settings()
         self.provider = self.settings.embedding_provider
         self.dim = self.settings.embedding_dim
+        self.model = self.settings.embedding_model or DEFAULT_EMBEDDING_MODELS.get(self.provider)
         self._fastembed_model = None
         self._openai_client = None
 
@@ -38,58 +46,59 @@ class EmbeddingService:
             try:
                 from fastembed import TextEmbedding
 
-                self._fastembed_model = TextEmbedding(model_name=self.settings.embedding_model)
-            except Exception:
-                self.provider = "mock"
+                self._fastembed_model = TextEmbedding(model_name=self.model)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to load FastEmbed model '{self.model}'. The first run "
+                    f"downloads it from HuggingFace and requires network access. "
+                    f"Set EMBEDDING_PROVIDER=mock to run offline. Cause: {exc}"
+                ) from exc
 
         elif self.provider == "openai":
             self._openai_client = get_openai_client(self.settings)
             if self._openai_client is None:
-                self.provider = "mock"
+                raise RuntimeError(
+                    "EMBEDDING_PROVIDER=openai but no OpenAI client could be built. "
+                    "Set OPENAI_API_KEY (and OPENAI_API_URL if using a proxy)."
+                )
 
     def embed_text(self, text: str) -> List[float]:
-        """Generate a 1536-dimensional vector embedding for a single text."""
+        """Generate a single embedding_dim-dimensional vector embedding."""
         return self.embed_texts([text])[0]
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
-        """Generate 1536-dimensional vector embeddings for a list of texts."""
+        """Generate embedding_dim-dimensional vector embeddings for a list of texts."""
         if not texts:
             return []
 
-        if self.provider == "openai" and self._openai_client:
-            try:
-                resp = self._openai_client.embeddings.create(
-                    model=self.settings.embedding_model,
-                    input=texts,
-                    dimensions=self.dim,
-                )
-                return [item.embedding for item in resp.data]
-            except Exception:
-                pass  # Fallback to mock
+        if self.provider == "openai":
+            resp = self._openai_client.embeddings.create(
+                model=self.model,
+                input=texts,
+                dimensions=self.dim,
+            )
+            return self._validate([item.embedding for item in resp.data])
 
-        if self.provider == "fastembed" and self._fastembed_model:
-            try:
-                embeddings_gen = self._fastembed_model.embed(texts)
-                results = []
-                for emb in embeddings_gen:
-                    vec = emb.tolist()
-                    # Pad or truncate to self.dim
-                    if len(vec) < self.dim:
-                        vec = vec + [0.0] * (self.dim - len(vec))
-                    else:
-                        vec = vec[: self.dim]
-                    results.append(vec)
-                return results
-            except Exception:
-                pass  # Fallback to mock
+        if self.provider == "fastembed":
+            return self._validate([emb.tolist() for emb in self._fastembed_model.embed(texts)])
 
         # Deterministic semantic hash projection (Mock provider)
         return [self._compute_mock_embedding(t) for t in texts]
 
+    def _validate(self, vectors: List[List[float]]) -> List[List[float]]:
+        """Reject vectors whose width disagrees with the configured EMBEDDING_DIM."""
+        if vectors and len(vectors[0]) != self.dim:
+            raise RuntimeError(
+                f"Model '{self.model}' returned {len(vectors[0])}-dim vectors but "
+                f"EMBEDDING_DIM is {self.dim}. Set EMBEDDING_DIM to match the model "
+                f"and recreate the pgvector columns in scripts/init_db.sql."
+            )
+        return vectors
+
     def _compute_mock_embedding(self, text: str) -> List[float]:
         """
-        Compute a deterministic 1536-dimensional unit vector using n-gram token projections.
-        Ensures texts sharing semantic keywords have high cosine similarity.
+        Compute a deterministic embedding_dim-dimensional unit vector using n-gram
+        token projections. Texts sharing semantic keywords get high cosine similarity.
         """
         clean_text = text.lower().strip()
         tokens = re.findall(r"\w+", clean_text)

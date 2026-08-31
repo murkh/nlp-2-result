@@ -141,7 +141,7 @@ class TestFeature3Boundaries:
         empty_text = "   \n\t   "
         # Should sanitize and generate valid normalized vector or handle gracefully
         vec = mock_embeddings.embed_text(empty_text.strip() or "empty")
-        assert len(vec) == 1536
+        assert len(vec) == mock_embeddings.dim
         assert abs(np.linalg.norm(vec) - 1.0) < 1e-5
 
     def test_bva3_extreme_cardinality_column_profile(self):
@@ -153,8 +153,8 @@ class TestFeature3Boundaries:
         assert constant_series.nunique() == 1
 
     def test_bva3_zero_vector_cosine_similarity_edge_case(self, mock_embeddings):
-        zero_v1 = [0.0] * 1536
-        zero_v2 = [0.0] * 1536
+        zero_v1 = [0.0] * mock_embeddings.dim
+        zero_v2 = [0.0] * mock_embeddings.dim
         sim = mock_embeddings.cosine_similarity(zero_v1, zero_v2)
         assert sim == 0.0
 
