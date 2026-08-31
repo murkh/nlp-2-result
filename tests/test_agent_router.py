@@ -13,7 +13,6 @@ from src.agent.graph import build_multi_agent_graph, get_agent_graph, route_inte
 from src.agent.nodes.chitchat_node import chitchat_node
 from src.agent.nodes.clarify_node import clarify_node
 from src.agent.nodes.router_node import supervisor_router_node
-from src.agent.nodes.structured_node import structured_node
 from src.agent.nodes.synthesizer_node import format_markdown_table, synthesizer_node
 from src.agent.nodes.unstructured_node import unstructured_node
 from src.routing import SupervisorRouter
@@ -212,7 +211,7 @@ class TestAgentRouter(unittest.TestCase):
         """Verify route_intent correctly maps state intent to target nodes."""
         self.assertEqual(route_intent({"intent": "GREETING_OR_CHITCHAT"}), "chitchat")
         self.assertEqual(route_intent({"intent": "AMBIGUOUS_QUERY"}), "clarification")
-        self.assertEqual(route_intent({"intent": "STRUCTURED_QUERY"}), "structured_agent")
+        self.assertEqual(route_intent({"intent": "STRUCTURED_QUERY"}), "schema_retriever")
         self.assertEqual(route_intent({"intent": "UNSTRUCTURED_QUERY"}), "unstructured_agent")
         self.assertEqual(route_intent({}), "chitchat")
 
@@ -309,8 +308,10 @@ class TestAgentRouter(unittest.TestCase):
             "telemetry": {},
         }
         res = synthesizer_node(state)
-        self.assertIn("encountered an issue", res["final_answer"])
+        self.assertIn("could not answer your question", res["final_answer"])
         self.assertIn("SyntaxError", res["final_answer"])
+        self.assertIn("Suggested fix", res["final_answer"])
+        self.assertIs(res["telemetry"]["execution_success"], False)
 
     # -------------------------------------------------------------------------
     # API Route Integration Tests

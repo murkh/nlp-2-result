@@ -17,6 +17,11 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from src.agent.nodes.loop._shared import (
+    SQL_BLOCK_LANGS,
+    extract_code_block,
+    schema_summary,
+)
 from src.agent.state import AgentState
 from src.config import Settings, get_settings
 from src.llm import require_openai_client
@@ -174,12 +179,10 @@ def _widen_sql(
     raw_text = resp.choices[0].message.content or ""
     comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
 
-    for lang, content in re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL):
-        if lang.lower().strip() in ("sql", "duckdb", "postgresql", "psql", ""):
-            return content.strip(), (prompt_tokens, comp_tokens)
-
-    logger.warning("Projection critic response contained no ```sql block.")
-    return None, (prompt_tokens, comp_tokens)
+    widened = extract_code_block(raw_text, SQL_BLOCK_LANGS)
+    if widened is None:
+        logger.warning("Projection critic response contained no ```sql block.")
+    return widened, (prompt_tokens, comp_tokens)
 
 
 def _tail_clauses(sql: str) -> str:
@@ -221,17 +224,6 @@ def is_widening_safe(original_sql: str, widened_sql: str) -> Tuple[bool, Optiona
     return True, None
 
 
-def _build_schema_summary(schema_context: Dict[str, Any]) -> str:
-    """Compact table/column listing with roles, for the critic prompt."""
-    retained = schema_context.get("retained_columns") or {}
-    roles = schema_context.get("column_roles") or {}
-    lines = []
-    for table, cols in retained.items():
-        rendered = ", ".join(f"{c} ({roles[c]})" if c in roles else c for c in cols)
-        lines.append(f"- {table}: {rendered}")
-    return "\n".join(lines)
-
-
 def projection_critic_node(state: AgentState) -> Dict[str, Any]:
     """
     Widen a thin SELECT list so the result carries the columns an analyst needs.
@@ -261,7 +253,7 @@ def projection_critic_node(state: AgentState) -> Dict[str, Any]:
     start = time.perf_counter()
     try:
         widened_sql, tokens = _widen_sql(
-            sql, missing, _build_schema_summary(schema_context), settings
+            sql, missing, schema_summary(schema_context), settings
         )
     except Exception as exc:
         # Includes LLMUnavailableError. A critic failure must never cost the user a

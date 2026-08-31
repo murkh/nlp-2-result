@@ -77,6 +77,20 @@ class Settings(BaseSettings):
     critic_model: Optional[str] = Field(default=None, alias="CRITIC_MODEL")
     projection_critic_enabled: bool = Field(default=True, alias="PROJECTION_CRITIC_ENABLED")
 
+    # Structured Self-Correction Loop
+    # The retry budget is safe only because every execution path is read-only
+    # (FORBIDDEN_SQL_PATTERNS, FORBIDDEN_DUCKDB_PATTERNS, the AST whitelist).
+    # If that surface ever permits mutation, remove the loop or make it idempotent.
+    #
+    # max_iters is 2 because the first correction pass carries almost all of the
+    # measured gain and later passes mostly add tokens.
+    structured_loop_enabled: bool = Field(default=True, alias="STRUCTURED_LOOP_ENABLED")
+    structured_loop_max_iters: int = Field(default=2, alias="STRUCTURED_LOOP_MAX_ITERS")
+    schema_exploration_enabled: bool = Field(default=True, alias="SCHEMA_EXPLORATION_ENABLED")
+    loop_tool_call_budget: int = Field(default=4, alias="LOOP_TOOL_CALL_BUDGET")
+    # Execution feedback carries the gains; model introspection is opt-in.
+    reflection_enabled: bool = Field(default=False, alias="REFLECTION_ENABLED")
+
     # Code Execution & Sandbox Security Limits
     sandbox_max_memory_mb: int = Field(default=512, alias="SANDBOX_MAX_MEMORY_MB")
     sandbox_timeout_sec: float = Field(default=5.0, alias="SANDBOX_TIMEOUT_SEC")

@@ -24,8 +24,9 @@ from src.api.schemas import (
 from src.config import Settings, get_settings
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import QueryLog
+from src.feedback import observation_prompt_block
 from src.llm import LLMUnavailableError, require_openai_client
-from src.pruning.schema_pruner import PrunedSchemaContext, TwoStageSchemaPruner
+from src.pruning.schema_pruner import TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,9 @@ class DedicatedDBEngine:
         # 2. Generate SQL query with LLM thought extraction
         gen_start = time.perf_counter()
         try:
-            sql_query, llm_thought, gen_tokens = self._generate_sql(query_text, pruned_context)
+            sql_query, llm_thought, gen_tokens = self.generate_code(
+                query_text, pruned_context.ddl_prompt_snippet
+            )
         except LLMUnavailableError as exc:
             gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
             total_lat = (time.perf_counter() - start_time) * 1000.0
@@ -313,14 +316,22 @@ class DedicatedDBEngine:
             return [], [], err
         return cols, [dict(zip(cols, row)) for row in rows], None
 
-    def _generate_sql(
-        self, query: str, context: PrunedSchemaContext
+    def generate_code(
+        self,
+        query: str,
+        ddl: str,
+        observations: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[str, Optional[str], Tuple[int, int]]:
-        """Generate a PostgreSQL query with the configured LLM. Raises LLMUnavailableError."""
+        """
+        Generate a PostgreSQL query with the configured LLM. Raises LLMUnavailableError.
+
+        With no observations the prompt is identical to the single-pass prompt, so
+        a first attempt costs exactly what it did before the loop existed.
+        """
         client = require_openai_client(self.settings)
         prompt = (
             f"You are an expert PostgreSQL data analyst. Write a valid read-only PostgreSQL query.\n"
-            f"Schema:\n{context.ddl_prompt_snippet}\n"
+            f"Schema:\n{ddl}\n"
             f"Question: {query}\n\n"
             f"Instructions:\n"
             f"1. In a ```thought block, explain your step-by-step reasoning: which tables/columns you selected, filtering/aggregation logic, and why.\n"
@@ -333,7 +344,7 @@ class DedicatedDBEngine:
             f"every column you compare in WHERE or HAVING, and every measure the question compares "
             f"or aggregates. Never return a bare id column on its own. This does not apply to a pure "
             f"scalar aggregate (a single COUNT/SUM/AVG over the whole table)."
-        )
+        ) + observation_prompt_block(observations)
 
         prompt_tokens = max(1, len(prompt) // 4)
 

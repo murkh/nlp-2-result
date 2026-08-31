@@ -275,7 +275,8 @@ class TestGraphTopology(unittest.TestCase):
         self.assertIn("projection_critic", nodes)
 
         edges = {(e.source, e.target) for e in graph.get_graph().edges}
-        self.assertIn(("structured_agent", "projection_critic"), edges)
+        # The structured branch reaches the critic through the reflector.
+        self.assertIn(("reflector", "projection_critic"), edges)
         self.assertIn(("projection_critic", "synthesizer"), edges)
         # The unstructured path is untouched.
         self.assertIn(("unstructured_agent", "synthesizer"), edges)

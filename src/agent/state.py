@@ -21,6 +21,7 @@ class TelemetryData(TypedDict, total=False):
     execution_success: bool
     error: Optional[str]
     projection_critic: Dict[str, Any]
+    loop: Dict[str, Any]
 
 
 class AgentState(TypedDict, total=False):
@@ -43,8 +44,11 @@ class AgentState(TypedDict, total=False):
 
     # Schema & Dataset Context
     candidate_datasets: List[str]
-    # Pruned schema slice (SchemaContextRef) the projection critic reasons over.
+    # Pruned schema slice (SchemaContextRef) the loop and critic reason over.
     pruned_tables: Dict[str, Any]
+    # DDL prompt snippet for the generators. Kept out of pruned_tables so engine
+    # API responses stay free of DDL text.
+    schema_ddl: str
     retrieved_chunks: List[Dict[str, Any]]
 
     # Execution Artifacts
@@ -52,6 +56,16 @@ class AgentState(TypedDict, total=False):
     execution_result: Optional[List[Dict[str, Any]]]
     execution_columns: Optional[List[str]]
     execution_error: Optional[str]
+
+    # Self-Correction Loop
+    # Accumulates across iterations. Order is significant for prompt
+    # reproducibility, so only sequential nodes may append.
+    observations: Annotated[List[Dict[str, Any]], operator.add]
+    # Written by explorer_planner only: a single sequential writer is what makes
+    # the retry budget well-defined.
+    loop_iterations: int
+    probe_plan: List[Dict[str, Any]]
+    reflection_class: Optional[str]
 
     # Synthesis & Outputs
     clarification_message: Optional[str]

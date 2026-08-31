@@ -7,6 +7,7 @@ bracketed citations, and execution telemetry metadata.
 from typing import Any, Dict, List, Optional
 
 from src.agent.state import AgentState
+from src.feedback import EXECUTION_ERROR, advice_for, classify_error
 from src.observability.telemetry import get_tracer
 
 
@@ -34,6 +35,31 @@ def format_markdown_table(
     if len(rows) > max_rows:
         table_md += f"\n\n*Showing top {max_rows} rows (total {len(rows)} rows, truncated).* "
     return table_md
+
+
+def format_failure(
+    execution_error: str,
+    observations: List[Dict[str, Any]],
+    attempts: int,
+) -> str:
+    """
+    Report a failed query as a failure, naming what actually went wrong.
+
+    No partial answer is synthesized from a failed run.
+    """
+    attempt_errors = [
+        f"- attempt {o.get('attempt')} ({o.get('correction_class')}): {o.get('error')}"
+        for o in observations
+        if o.get("kind") == EXECUTION_ERROR
+    ]
+
+    lines = [f"I could not answer your question: {execution_error}"]
+    if attempts > 1 and attempt_errors:
+        lines.append(f"**{attempts} attempts were made:**\n" + "\n".join(attempt_errors))
+    lines.append(
+        f"Suggested fix: {advice_for(classify_error(execution_error))}"
+    )
+    return "\n\n".join(lines)
 
 
 def synthesizer_node(state: AgentState) -> Dict[str, Any]:
@@ -72,9 +98,10 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
         final_answer = ""
 
         if execution_error:
-            final_answer = (
-                f"I encountered an issue executing your query: {execution_error}\n\n"
-                "Please verify your query parameters or check the dataset schema."
+            final_answer = format_failure(
+                execution_error,
+                observations=state.get("observations") or [],
+                attempts=state.get("loop_iterations") or 0,
             )
         elif intent == "STRUCTURED_QUERY":
             # 1. Base answer

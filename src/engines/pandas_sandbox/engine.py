@@ -26,8 +26,9 @@ from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import QueryLog
 from src.engines.pandas_sandbox.ast_validator import validate_python_code
 from src.engines.pandas_sandbox.runner import execute_sandboxed_code
+from src.feedback import observation_prompt_block
 from src.llm import LLMUnavailableError, require_openai_client
-from src.pruning.schema_pruner import PrunedSchemaContext, TwoStageSchemaPruner
+from src.pruning.schema_pruner import TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
 
 logger = logging.getLogger(__name__)
@@ -92,8 +93,10 @@ class PandasSandboxEngine:
         # 2. Generate Python code with LLM thought extraction
         gen_start = time.perf_counter()
         try:
-            python_code, llm_thought, gen_tokens = self._generate_python_code(
-                query_text, pruned_context
+            python_code, llm_thought, gen_tokens = self.generate_code(
+                query_text,
+                pruned_context.ddl_prompt_snippet,
+                file_paths=pruned_context.file_paths,
             )
         except LLMUnavailableError as exc:
             gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
@@ -120,27 +123,11 @@ class PandasSandboxEngine:
             )
         gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
 
-        # Fallback: ensure dataset loader is present if code references df without defining it
-        if (
-            ("df." in python_code or "df[" in python_code)
-            and "pd.read_" not in python_code
-            and pruned_context.table_names
-        ):
-            first_tbl = pruned_context.table_names[0]
-            first_path = pruned_context.file_paths.get(first_tbl, "")
-            if first_path:
-                if first_path.endswith(".parquet"):
-                    python_code = (
-                        f"import pandas as pd\ndf = pd.read_parquet({first_path!r})\n" + python_code
-                    )
-                elif first_path.endswith(".xlsx") or first_path.endswith(".xls"):
-                    python_code = (
-                        f"import pandas as pd\ndf = pd.read_excel({first_path!r})\n" + python_code
-                    )
-                else:
-                    python_code = (
-                        f"import pandas as pd\ndf = pd.read_csv({first_path!r})\n" + python_code
-                    )
+        python_code = self.apply_dataset_loader(
+            python_code,
+            file_paths=pruned_context.file_paths,
+            table_names=pruned_context.table_names,
+        )
 
         # 3. AST Security validation
         is_safe, err_msg = validate_python_code(python_code)
@@ -315,16 +302,70 @@ class PandasSandboxEngine:
             token_usage=token_usage,
         )
 
-    def _generate_python_code(
-        self, query: str, context: PrunedSchemaContext
+    @staticmethod
+    def _loader_call(path: str) -> str:
+        if path.endswith(".parquet"):
+            return f"pd.read_parquet({path!r})"
+        if path.endswith((".xlsx", ".xls")):
+            return f"pd.read_excel({path!r})"
+        return f"pd.read_csv({path!r})"
+
+    def apply_dataset_loader(
+        self,
+        code: str,
+        file_paths: Dict[str, str],
+        table_names: List[str],
+    ) -> str:
+        """Prepend a `df` loader when the code uses `df` without reading a file."""
+        uses_df = "df." in code or "df[" in code
+        if not uses_df or "pd.read_" in code or not table_names:
+            return code
+
+        path = (file_paths or {}).get(table_names[0], "")
+        if not path:
+            return code
+        return f"import pandas as pd\ndf = {self._loader_call(path)}\n{code}"
+
+    def execute_code(self, code: str) -> Tuple[List[str], List[Dict[str, Any]], Optional[str]]:
+        """
+        Run already-generated code through the AST whitelist and the sandbox.
+
+        Mirrors execute_sql on the SQL engines: the guardrails run here, so this is
+        a complete execution path and not a shortcut past them.
+        """
+        is_safe, err_msg = validate_python_code(code)
+        if not is_safe:
+            return [], [], err_msg
+
+        success, result_data, stderr_msg, _exit_code = execute_sandboxed_code(
+            code=code,
+            timeout_seconds=self.settings.sandbox_timeout_sec,
+            max_memory_mb=self.settings.sandbox_max_memory_mb,
+        )
+        if not success:
+            return [], [], stderr_msg
+
+        return result_data.get("columns", []), result_data.get("rows", []), None
+
+    def generate_code(
+        self,
+        query: str,
+        ddl: str,
+        observations: Optional[List[Dict[str, Any]]] = None,
+        file_paths: Optional[Dict[str, str]] = None,
     ) -> Tuple[str, Optional[str], Tuple[int, int]]:
-        """Generate sandboxed Python DataFrame code with the LLM. Raises LLMUnavailableError."""
+        """
+        Generate sandboxed Pandas code with the LLM. Raises LLMUnavailableError.
+
+        With no observations the prompt is identical to the single-pass prompt, so
+        a first attempt costs exactly what it did before the loop existed.
+        """
         client = require_openai_client(self.settings)
-        file_paths_str = "\n".join(f"- {tbl}: {p}" for tbl, p in context.file_paths.items())
+        file_paths_str = "\n".join(f"- {tbl}: {p}" for tbl, p in (file_paths or {}).items())
         prompt = (
             f"You are an expert Python data engineer. Write clean vectorized Pandas transformation code.\n"
             f"Dataset Files:\n{file_paths_str}\n"
-            f"Schema:\n{context.ddl_prompt_snippet}\n"
+            f"Schema:\n{ddl}\n"
             f"Question: {query}\n\n"
             f"Instructions:\n"
             f"1. In a ```thought block, explain your step-by-step reasoning: how you read the file(s), filter, aggregate, and assign result.\n"
@@ -340,7 +381,7 @@ class PandasSandboxEngine:
             f"every column you filter or compare on, and every measure the question compares or "
             f"aggregates. Never return a bare id column on its own. This does not apply to a pure "
             f"scalar aggregate over the whole DataFrame."
-        )
+        ) + observation_prompt_block(observations)
 
         prompt_tokens = max(1, len(prompt) // 4)
 

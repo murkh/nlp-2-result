@@ -4,6 +4,8 @@ Provides the POST /query/agent endpoint executing the LangGraph multi-agent work
 """
 
 import uuid
+from typing import Any, Dict, List
+
 from fastapi import APIRouter
 
 
@@ -21,6 +23,59 @@ from src.llm import LLMUnavailableError
 
 
 router = APIRouter(prefix="/query", tags=["Agent Orchestration"])
+
+
+def _loop_steps(loop: Dict[str, Any], offset: int) -> List[DecisionStep]:
+    """One decision step per correction attempt, plus one for the probes."""
+    if not loop:
+        return []
+
+    steps: List[DecisionStep] = []
+    tool_calls = loop.get("tool_calls") or 0
+    if tool_calls:
+        steps.append(
+            DecisionStep(
+                step_number=offset + len(steps) + 1,
+                title="Schema Value Grounding",
+                choice=f"Inspected the data {tool_calls} time(s)",
+                reasoning=(
+                    "Read the stored values before writing the query, so filters match "
+                    "the real spelling and casing instead of a guess."
+                ),
+                details={"tool_calls": tool_calls},
+            )
+        )
+
+    attempts = loop.get("attempts") or []
+    for record in attempts[1:]:
+        steps.append(
+            DecisionStep(
+                step_number=offset + len(steps) + 1,
+                title=f"Self-Correction Attempt {record.get('attempt')}",
+                choice=f"Outcome: {record.get('outcome')}",
+                reasoning=(
+                    "The previous attempt did not produce a usable result, so the error "
+                    "was fed back and the statement regenerated."
+                ),
+                details=record,
+            )
+        )
+
+    if loop.get("escalated"):
+        steps.append(
+            DecisionStep(
+                step_number=offset + len(steps) + 1,
+                title="Escalated to the User",
+                choice="Retry budget spent, no answer invented",
+                reasoning=(
+                    "Every attempt failed to execute, so the query was handed back with "
+                    "what was tried and what the data contains."
+                ),
+                details={"iterations": loop.get("iterations")},
+            )
+        )
+
+    return steps
 
 
 @router.post("/agent", response_model=QueryAgentResponse)
@@ -137,6 +192,7 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
                     details={"code": gen_code},
                 )
             )
+        steps.extend(_loop_steps(telemetry.get("loop") or {}, len(steps)))
         steps.append(
             DecisionStep(
                 step_number=len(steps) + 1,

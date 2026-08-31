@@ -56,7 +56,9 @@ def clarify_node(state: AgentState) -> Dict[str, Any]:
                 + prompt_tokens
                 + completion_tokens,
                 "latency_ms": round(trace.latency_ms, 2),
-                "execution_success": True,
+                # A clarification reached because there was nothing to query is
+                # still a failed query, not a successful turn.
+                "execution_success": state.get("execution_error") is None,
             }
         )
 

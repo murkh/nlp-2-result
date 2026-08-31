@@ -2142,6 +2142,9 @@ dependencies = [
     { name = "langfuse" },
     { name = "langgraph" },
     { name = "markdown" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "openai" },
     { name = "openpyxl" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -2166,10 +2169,12 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "black" },
+    { name = "datasets" },
     { name = "flake8" },
     { name = "isort" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pyyaml" },
     { name = "ragas" },
 ]
 
@@ -2177,6 +2182,7 @@ dev = [
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.8.0" },
+    { name = "datasets", marker = "extra == 'dev'", specifier = ">=2.20.0" },
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "fastapi", specifier = ">=0.112.0" },
     { name = "fastembed", specifier = ">=0.3.4" },
@@ -2187,6 +2193,7 @@ requires-dist = [
     { name = "langfuse", specifier = ">=2.40.0" },
     { name = "langgraph", specifier = ">=0.2.0" },
     { name = "markdown", specifier = ">=3.6" },
+    { name = "numpy", specifier = ">=1.26.0" },
     { name = "openai", specifier = ">=1.40.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=2.2.2" },
@@ -2201,6 +2208,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.8" },
     { name = "python-docx", specifier = ">=1.1.2" },
     { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "ragas", marker = "extra == 'dev'", specifier = ">=0.1.15" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "sqlalchemy", specifier = ">=2.0.30" },

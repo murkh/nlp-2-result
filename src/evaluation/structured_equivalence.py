@@ -316,6 +316,9 @@ class StructuredBenchmarkRecord:
     completion_tokens: int = 0
     total_tokens: int = 0
     estimated_cost_usd: float = 0.0
+    # Generation attempts spent on this case. 1 means the self-correction loop
+    # did not fire, which is what a single-pass run always reports.
+    iterations: int = 1
 
 
 @dataclass
@@ -329,12 +332,21 @@ class StructuredBenchmarkResult:
     token_summary: Dict[str, Any]
     per_engine_stats: Dict[str, Dict[str, Any]]
     details: List[Dict[str, Any]] = field(default_factory=list)
+    # Equivalence reached without a correction pass.
+    first_pass_equivalence_rate: float = 0.0
+    # equivalence_rate - first_pass_equivalence_rate: what self-correction bought,
+    # to weigh against the token cost in token_summary.
+    correction_gain: float = 0.0
+    mean_iterations: float = 1.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_cases": self.total_cases,
             "syntax_first_pass_rate": self.syntax_first_pass_rate,
             "equivalence_rate": self.equivalence_rate,
+            "first_pass_equivalence_rate": self.first_pass_equivalence_rate,
+            "correction_gain": self.correction_gain,
+            "mean_iterations": self.mean_iterations,
             "latency_stats": self.latency_stats,
             "token_summary": self.token_summary,
             "per_engine_stats": self.per_engine_stats,
@@ -346,6 +358,9 @@ class StructuredBenchmarkResult:
             "total_cases": self.total_cases,
             "syntax_first_pass_rate_pct": round(self.syntax_first_pass_rate * 100, 2),
             "equivalence_rate_pct": round(self.equivalence_rate * 100, 2),
+            "first_pass_equivalence_rate_pct": round(self.first_pass_equivalence_rate * 100, 2),
+            "correction_gain_pct": round(self.correction_gain * 100, 2),
+            "mean_iterations": self.mean_iterations,
             "mean_latency_ms": self.latency_stats.get("mean_ms", 0.0),
             "p95_latency_ms": self.latency_stats.get("p95_ms", 0.0),
             "total_tokens": self.token_summary.get("total_tokens", 0),
@@ -380,6 +395,7 @@ class StructuredEquivalenceEvaluator:
         error: Optional[str] = None,
         test_id: Optional[str] = None,
         model: Optional[str] = None,
+        iterations: int = 1,
     ) -> StructuredBenchmarkRecord:
         """
         Evaluate a single test case comparing generated DataFrame with golden baseline.
@@ -419,6 +435,7 @@ class StructuredEquivalenceEvaluator:
             completion_tokens=completion_tokens,
             total_tokens=total_tok,
             estimated_cost_usd=cost,
+            iterations=max(1, iterations),
         )
 
     def evaluate_benchmark(
@@ -469,6 +486,7 @@ class StructuredEquivalenceEvaluator:
                 error=err,
                 test_id=tid,
                 model=model,
+                iterations=int(tc.get("iterations") or 1),
             )
             records.append(record)
 
@@ -489,6 +507,11 @@ class StructuredEquivalenceEvaluator:
 
         syntax_rate = round(syntax_passes / total_cases, 4)
         equiv_rate = round(equiv_passes / total_cases, 4)
+
+        first_pass_equiv = sum(1 for r in records if r.is_equivalent and r.iterations == 1)
+        first_pass_rate = round(first_pass_equiv / total_cases, 4)
+        correction_gain = round(equiv_rate - first_pass_rate, 4)
+        mean_iterations = round(sum(r.iterations for r in records) / total_cases, 3)
 
         all_latencies = [r.latency_ms for r in records]
         latency_stats = compute_latency_statistics(all_latencies)
@@ -540,6 +563,7 @@ class StructuredEquivalenceEvaluator:
                 "completion_tokens": r.completion_tokens,
                 "total_tokens": r.total_tokens,
                 "estimated_cost_usd": r.estimated_cost_usd,
+                "iterations": r.iterations,
             }
             for r in records
         ]
@@ -548,6 +572,9 @@ class StructuredEquivalenceEvaluator:
             total_cases=total_cases,
             syntax_first_pass_rate=syntax_rate,
             equivalence_rate=equiv_rate,
+            first_pass_equivalence_rate=first_pass_rate,
+            correction_gain=correction_gain,
+            mean_iterations=mean_iterations,
             latency_stats=latency_stats,
             token_summary=token_summary,
             per_engine_stats=per_engine_stats,
