@@ -37,14 +37,19 @@ services:
       DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/knowledge_base
       ASYNC_DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@postgres:5432/knowledge_base
       BLOB_STORAGE_PATH: /app/data/blob
+      # Interpolated from .env (compose reads it automatically); :- supplies the
+      # fallback when the var is unset or empty there.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-mock-key}
       OPENAI_API_URL: ${OPENAI_API_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.0}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fastembed}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
       # Cached on a named volume so the HuggingFace model downloads only once
       FASTEMBED_CACHE_PATH: /app/.cache/fastembed
       LANGFUSE_HOST: http://langfuse:3000
+      LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-false}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
     ports:
