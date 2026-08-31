@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     default_max_cols_per_table: int = Field(default=8, alias="DEFAULT_MAX_COLS_PER_TABLE")
     default_total_max_cols: int = Field(default=20, alias="DEFAULT_TOTAL_MAX_COLS")
 
+    # Supervisor Routing Confidence Tiers
+    # >= semantic threshold: local fast path. Between the two: LLM fallback.
+    # < ambiguity threshold: clarification guardrail.
+    router_semantic_threshold: float = Field(default=0.72, alias="ROUTER_SEMANTIC_THRESHOLD")
+    router_ambiguity_threshold: float = Field(default=0.50, alias="ROUTER_AMBIGUITY_THRESHOLD")
+
     # Observability (Langfuse)
     langfuse_enabled: bool = Field(default=False, alias="LANGFUSE_ENABLED")
     langfuse_public_key: Optional[str] = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")

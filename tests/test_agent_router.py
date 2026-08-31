@@ -16,7 +16,7 @@ from src.agent.nodes.router_node import supervisor_router_node
 from src.agent.nodes.structured_node import structured_node
 from src.agent.nodes.synthesizer_node import format_markdown_table, synthesizer_node
 from src.agent.nodes.unstructured_node import unstructured_node
-from src.agent.router import SupervisorRouter
+from src.routing import SupervisorRouter
 from src.agent.state import AgentState
 from src.api.routes import agent
 from src.api.schemas import QueryAgentRequest, QueryAgentResponse
