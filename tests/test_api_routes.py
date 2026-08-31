@@ -27,6 +27,7 @@ from src.ingestion.metadata_extractor import EmbeddingService, MetadataExtractor
 from src.ingestion.structured import StructuredIngestionEngine
 from src.ingestion.unstructured import UnstructuredIngestionEngine
 from src.storage.blob_store import get_blob_manager
+from tests.conftest import requires_llm
 
 
 class TestAPIRoutes(unittest.TestCase):
@@ -99,6 +100,7 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertEqual(resp.name, "Test Upload")
         self.assertEqual(resp.category, "structured")
 
+    @requires_llm
     def test_query_dedicated_db_endpoint(self):
         """Verify POST /query/dedicated-db."""
         req = QueryDedicatedDBRequest(query="How many total orders are there?")
@@ -108,6 +110,7 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIsNotNone(resp.thinking_process)
         self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
+    @requires_llm
     def test_query_duckdb_endpoint(self):
         """Verify POST /query/duckdb."""
         req = QueryDuckDBRequest(query="How many total orders are there?")
@@ -117,6 +120,7 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIsNotNone(resp.thinking_process)
         self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
+    @requires_llm
     def test_query_pandas_sandbox_endpoint(self):
         """Verify POST /query/pandas-sandbox."""
         req = QueryPandasSandboxRequest(query="How many total orders are there?")
@@ -127,6 +131,7 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIsNotNone(resp.thinking_process)
         self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
+    @requires_llm
     def test_query_unstructured_rag_endpoint(self):
         """Verify POST /query/unstructured-rag."""
         req = QueryUnstructuredRAGRequest(query="What is the rate limit for authenticated clients?")
@@ -137,6 +142,7 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIsNotNone(resp.thinking_process)
         self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
 
+    @requires_llm
     def test_query_benchmark_endpoint(self):
         """Verify POST /query/benchmark."""
         req = QueryBenchmarkRequest(query="How many total orders are there?")
@@ -149,6 +155,7 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIsNotNone(resp.strategy_b.thinking_process)
         self.assertIsNotNone(resp.strategy_c.thinking_process)
 
+    @requires_llm
     def test_query_agent_endpoint(self):
         """Verify POST /query/agent conversational endpoint."""
         req = QueryAgentRequest(

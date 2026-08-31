@@ -13,7 +13,7 @@ from src.engines.benchmark_arena import (
     are_values_equivalent,
     compare_tabular_results,
 )
-from tests.conftest import create_test_fixtures
+from tests.conftest import create_test_fixtures, only_value, requires_llm
 
 
 class TestBenchmarkArena(unittest.TestCase):
@@ -71,6 +71,7 @@ class TestBenchmarkArena(unittest.TestCase):
         self.assertTrue(compare_tabular_results(res1, res2))
         self.assertFalse(compare_tabular_results(res1, res3))
 
+    @requires_llm
     def test_parallel_benchmark_count_query(self):
         """Verify parallel execution of Strategy A, B, and C on count query."""
         req = QueryBenchmarkRequest(query="How many total orders are in the database?")
@@ -86,6 +87,7 @@ class TestBenchmarkArena(unittest.TestCase):
         self.assertIsNotNone(resp.benchmark_summary.fastest_strategy)
         self.assertIsNotNone(resp.benchmark_summary.most_token_efficient_strategy)
 
+    @requires_llm
     def test_parallel_benchmark_sum_query(self):
         """Verify parallel execution on revenue sum query with equivalence check."""
         req = QueryBenchmarkRequest(query="What is the total sales revenue?")
@@ -95,9 +97,10 @@ class TestBenchmarkArena(unittest.TestCase):
         self.assertEqual(resp.strategy_b.status, "SUCCESS")
         self.assertEqual(resp.strategy_c.status, "SUCCESS")
 
-        val_a = float(resp.strategy_a.tabular_result.rows[0]["total_revenue"])
-        val_b = float(resp.strategy_b.tabular_result.rows[0]["total_revenue"])
-        val_c = float(resp.strategy_c.tabular_result.rows[0]["total_revenue"])
+        # Each strategy lets the LLM name its own output column; compare values.
+        val_a = float(only_value(resp.strategy_a.tabular_result))
+        val_b = float(only_value(resp.strategy_b.tabular_result))
+        val_c = float(only_value(resp.strategy_c.tabular_result))
 
         self.assertAlmostEqual(val_a, 1061.55, places=2)
         self.assertAlmostEqual(val_b, 1061.55, places=2)

@@ -4,6 +4,7 @@ Orchestrates prompt generation, AST security validation,
 isolated subprocess execution, and data-backed response synthesis.
 """
 
+import logging
 import os
 import re
 import time
@@ -25,9 +26,11 @@ from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import QueryLog
 from src.engines.pandas_sandbox.ast_validator import validate_python_code
 from src.engines.pandas_sandbox.runner import execute_sandboxed_code
-from src.llm import get_openai_client
+from src.llm import LLMUnavailableError, require_openai_client
 from src.pruning.schema_pruner import PrunedSchemaContext, TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
+
+logger = logging.getLogger(__name__)
 
 
 class PandasSandboxEngine:
@@ -48,7 +51,6 @@ class PandasSandboxEngine:
             db_manager=self.db_manager, blob_manager=self.blob_manager
         )
         self.settings = settings or get_settings()
-        self._openai_client = get_openai_client(self.settings)
 
     def execute_query(
         self,
@@ -89,9 +91,33 @@ class PandasSandboxEngine:
 
         # 2. Generate Python code with LLM thought extraction
         gen_start = time.perf_counter()
-        python_code, llm_thought, gen_tokens = self._generate_python_code(
-            query_text, pruned_context
-        )
+        try:
+            python_code, llm_thought, gen_tokens = self._generate_python_code(
+                query_text, pruned_context
+            )
+        except LLMUnavailableError as exc:
+            gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
+            total_lat = (time.perf_counter() - start_time) * 1000.0
+            self.db_manager.log_query(
+                QueryLog(
+                    query_text=query_text,
+                    engine="strategy_c_pandas_sandbox",
+                    status="ERROR",
+                    latency_ms=total_lat,
+                    error_message=str(exc),
+                )
+            )
+            return QueryPandasSandboxResponse(
+                query=query_text,
+                answer=f"Python code generation failed: {exc}",
+                python_code="",
+                tabular_result=TabularResult(columns=[], rows=[], row_count=0),
+                security_report=SandboxSecurityReport(ast_passed=True, violations=[], exit_code=0),
+                metrics=ExecutionMetrics(
+                    query_generation_ms=gen_latency_ms, total_latency_ms=total_lat
+                ),
+                error=str(exc),
+            )
         gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
 
         # Fallback: ensure dataset loader is present if code references df without defining it
@@ -292,7 +318,8 @@ class PandasSandboxEngine:
     def _generate_python_code(
         self, query: str, context: PrunedSchemaContext
     ) -> Tuple[str, Optional[str], Tuple[int, int]]:
-        """Generate sandboxed Python DataFrame code using LLM or deterministic generator."""
+        """Generate sandboxed Python DataFrame code with the LLM. Raises LLMUnavailableError."""
+        client = require_openai_client(self.settings)
         file_paths_str = "\n".join(f"- {tbl}: {p}" for tbl, p in context.file_paths.items())
         prompt = (
             f"You are an expert Python data engineer. Write clean vectorized Pandas transformation code.\n"
@@ -304,130 +331,45 @@ class PandasSandboxEngine:
             f"2. In a ```python block, write ONLY the executable Python script.\n"
             f"3. You MUST load the dataset file using `pd.read_csv('/exact/path/to/file.csv')` or `pd.read_parquet(...)` using the exact paths given in Dataset Files.\n"
             f"4. Assign the final DataFrame, Series, or scalar output to a variable named `result`.\n"
-            f"5. Ensure `result = result.head(20)` if returning a DataFrame."
+            f"5. Ensure `result = result.head(20)` if returning a DataFrame.\n"
+            f"6. Translate every condition in the question into an explicit boolean mask filter. "
+            f"Use the '-- samples:' values in the schema for exact literal spellings and casing. "
+            f"Never aggregate over the whole DataFrame when the question restricts rows."
         )
 
         prompt_tokens = max(1, len(prompt) // 4)
 
-        if self._openai_client:
-            try:
-                resp = self._openai_client.chat.completions.create(
-                    model=self.settings.openai_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.0,
-                )
-                raw_text = resp.choices[0].message.content or ""
-
-                thought = None
-                code = None
-                blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
-                for lang, content in blocks:
-                    lang_clean = lang.lower().strip()
-                    if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
-                        thought = content.strip()
-                    elif lang_clean in ("python", "py"):
-                        code = content.strip()
-
-                if not code:
-                    code_match = re.search(r"```(?:python)?(.*?)```", raw_text, re.DOTALL)
-                    code = code_match.group(1).strip() if code_match else raw_text.strip()
-
-                comp_tokens = (
-                    resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
-                )
-                return code, thought, (prompt_tokens, comp_tokens)
-            except Exception:
-                pass
-
-        # Deterministic Python code generator
-        code = self._deterministic_pandas_code(query, context)
-        comp_tokens = max(1, len(code) // 4)
-        return code, None, (prompt_tokens, comp_tokens)
-
-    def _deterministic_pandas_code(self, query: str, context: PrunedSchemaContext) -> str:
-        """Deterministic Python code generator mapping query intent to Pandas script."""
-        if not context.table_names or not context.file_paths:
-            return "result = {'status': 1}"
-
-        primary_table = context.table_names[0]
-        blob_path = context.file_paths.get(primary_table, "")
-        retained_cols = context.retained_columns.get(primary_table, [])
-        lower_q = query.lower()
-
-        if blob_path.endswith(".parquet"):
-            loader = f"""import pandas as pd
-df = pd.read_parquet({blob_path!r})
-"""
-        else:
-            loader = f"""import pandas as pd
-df = pd.read_csv({blob_path!r})
-"""
-
-        # Logic 1: Count queries
-        if "how many" in lower_q or "count" in lower_q or "total number" in lower_q:
-            if "status" in lower_q and "status" in retained_cols:
-                return loader + """res = df.groupby('status').size().reset_index(name='total_count')
-result = res.sort_values(by='total_count', ascending=False).head(20)
-"""
-            if "completed" in lower_q and "status" in retained_cols:
-                return (
-                    loader + """count = len(df[df['status'].astype(str).str.lower() == 'completed'])
-result = {'completed_count': count}
-"""
-                )
-            return loader + """result = {'total_records': len(df)}
-"""
-
-        # Logic 2: Sum / average queries
-        amount_col = next(
-            (
-                c
-                for c in retained_cols
-                if "amount" in c.lower()
-                or "price" in c.lower()
-                or "total" in c.lower()
-                or "sales" in c.lower()
-            ),
-            None,
-        )
-        if ("sum" in lower_q or "total sales" in lower_q or "revenue" in lower_q) and amount_col:
-            city_col = next(
-                (c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None
+        try:
+            resp = client.chat.completions.create(
+                model=self.settings.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
             )
-            if city_col and ("by city" in lower_q or "per city" in lower_q or "top" in lower_q):
-                return (
-                    loader
-                    + f"""df[{amount_col!r}] = pd.to_numeric(df[{amount_col!r}], errors='coerce').fillna(0)
-res = df.groupby({city_col!r})[{amount_col!r}].sum().reset_index(name='total_revenue')
-result = res.sort_values(by='total_revenue', ascending=False).head(20)
-"""
-                )
-            return (
-                loader + f"""total = float(pd.to_numeric(df[{amount_col!r}], errors='coerce').sum())
-result = {{'total_revenue': total}}
-"""
+            raw_text = resp.choices[0].message.content or ""
+        except Exception as exc:
+            logger.exception(
+                "Pandas code generation call failed (model=%s, base_url=%s)",
+                self.settings.openai_model,
+                self.settings.openai_api_url,
             )
+            raise LLMUnavailableError(f"LLM call failed: {exc}") from exc
 
-        if ("average" in lower_q or "avg" in lower_q) and amount_col:
-            return (
-                loader
-                + f"""avg_val = float(pd.to_numeric(df[{amount_col!r}], errors='coerce').mean())
-result = {{'average_amount': avg_val}}
-"""
-            )
+        thought = None
+        code = None
+        blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
+        for lang, content in blocks:
+            lang_clean = lang.lower().strip()
+            if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
+                thought = content.strip()
+            elif lang_clean in ("python", "py"):
+                code = content.strip()
 
-        # Logic 3: Top N / highest
-        if ("highest" in lower_q or "top" in lower_q or "most expensive" in lower_q) and amount_col:
-            return (
-                loader
-                + f"""df[{amount_col!r}] = pd.to_numeric(df[{amount_col!r}], errors='coerce').fillna(0)
-result = df.sort_values(by={amount_col!r}, ascending=False).head(20)
-"""
-            )
+        if not code:
+            logger.error("LLM response contained no ```python block. Raw response:\n%s", raw_text)
+            raise LLMUnavailableError("LLM response contained no ```python block")
 
-        # Default select
-        return loader + """result = df.head(20)
-"""
+        comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+        return code, thought, (prompt_tokens, comp_tokens)
 
     def _synthesize_answer(
         self, query: str, code: str, result: TabularResult

@@ -7,13 +7,17 @@ Classifies queries into four core intent routes:
 - UNSTRUCTURED_QUERY: Routes to hybrid dense+sparse document RAG engine.
 """
 
+import json
+import logging
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from src.api.schemas import BaseModel, Field
 from src.config import Settings, get_settings
 from src.database.connection import DatabaseManager, get_db_manager
-from src.llm import get_openai_client
+from src.llm import LLMUnavailableError, require_openai_client
+
+logger = logging.getLogger(__name__)
 
 
 class SupervisorDecision(BaseModel):
@@ -179,7 +183,6 @@ class SupervisorRouter:
     ):
         self.db_manager = db_manager or get_db_manager()
         self.settings = settings or get_settings()
-        self._openai_client = get_openai_client(self.settings)
 
     def classify_intent(self, query: str, session_id: Optional[str] = None) -> SupervisorDecision:
         """
@@ -256,94 +259,66 @@ class SupervisorRouter:
                     ),
                 )
 
-        # 3. LLM-Based Intent Classification if OpenAI client is active
-        if self._openai_client:
-            try:
-                import json
+        # 3. LLM-Based Intent Classification (no heuristic fallback: failures must surface)
+        client = require_openai_client(self.settings)
+        llm_prompt = (
+            f"You are the Supervisor Router for an AI Knowledge Base Q&A platform.\n"
+            f"Classify the following user query into one of: STRUCTURED_QUERY, UNSTRUCTURED_QUERY, AMBIGUOUS_QUERY, GREETING_OR_CHITCHAT.\n"
+            f"Available structured tables: {dataset_info.get('structured', [])}\n"
+            f"Available unstructured documents: {dataset_info.get('unstructured', [])}\n"
+            f"User Query: {clean_q}\n\n"
+            f"suggested_strategy is one of duckdb, dedicated_db, pandas_sandbox. "
+            f"If the query names an engine explicitly - pandas/python/dataframe -> pandas_sandbox, "
+            f"postgres/dedicated table -> dedicated_db - honour that choice; otherwise use duckdb.\n"
+            f"Provide response strictly in JSON format:\n"
+            f'{{"intent": "...", "confidence": 0.95, "reasoning": "...", "suggested_strategy": "duckdb"}}'
+        )
 
-                llm_prompt = (
-                    f"You are the Supervisor Router for an AI Knowledge Base Q&A platform.\n"
-                    f"Classify the following user query into one of: STRUCTURED_QUERY, UNSTRUCTURED_QUERY, AMBIGUOUS_QUERY, GREETING_OR_CHITCHAT.\n"
-                    f"Available structured tables: {dataset_info.get('structured', [])}\n"
-                    f"Available unstructured documents: {dataset_info.get('unstructured', [])}\n"
-                    f"User Query: {clean_q}\n\n"
-                    f"Provide response strictly in JSON format:\n"
-                    f'{{"intent": "...", "confidence": 0.95, "reasoning": "...", "suggested_strategy": "duckdb"}}'
-                )
-                resp = self._openai_client.chat.completions.create(
-                    model=self.settings.openai_model,
-                    messages=[{"role": "user", "content": llm_prompt}],
-                    temperature=0.0,
-                    response_format=(
-                        {"type": "json_object"} if hasattr(self.settings, "openai_model") else None
-                    ),
-                )
-                raw_json = resp.choices[0].message.content or "{}"
-                data = json.loads(raw_json)
-                intent_val = data.get("intent", "").upper()
-                if intent_val in (
-                    "STRUCTURED_QUERY",
-                    "UNSTRUCTURED_QUERY",
-                    "AMBIGUOUS_QUERY",
-                    "GREETING_OR_CHITCHAT",
-                ):
-                    strat = data.get("suggested_strategy")
-                    if strat not in ("duckdb", "dedicated_db", "pandas_sandbox"):
-                        strat = "duckdb"
-                    return SupervisorDecision(
-                        intent=intent_val,
-                        confidence=float(data.get("confidence", 0.95)),
-                        reasoning=str(
-                            data.get("reasoning", f"LLM classified query as {intent_val}")
-                        ),
-                        suggested_strategy=strat if intent_val == "STRUCTURED_QUERY" else None,
-                        relevant_datasets=dataset_info.get(
-                            "structured" if intent_val == "STRUCTURED_QUERY" else "unstructured", []
-                        ),
-                        clarification_question=data.get("clarification_question"),
-                    )
-            except Exception:
-                pass
+        try:
+            resp = client.chat.completions.create(
+                model=self.settings.openai_model,
+                messages=[{"role": "user", "content": llm_prompt}],
+                temperature=0.0,
+                response_format={"type": "json_object"},
+            )
+            raw_json = resp.choices[0].message.content or "{}"
+        except Exception as exc:
+            logger.exception(
+                "Intent classification call failed (model=%s, base_url=%s)",
+                self.settings.openai_model,
+                self.settings.openai_api_url,
+            )
+            raise LLMUnavailableError(f"LLM call failed: {exc}") from exc
 
-        # 4. Deterministic / Heuristic Classification Fallback
-        suggested_strategy: Literal["dedicated_db", "duckdb", "pandas_sandbox"] = "duckdb"
-        if "pandas" in eval_q or "python" in eval_q or "dataframe" in eval_q or "sandbox" in eval_q:
-            suggested_strategy = "pandas_sandbox"
-        elif (
-            "postgres" in eval_q
-            or "dedicated" in eval_q
-            or "postgresql" in eval_q
-            or "sql table" in eval_q
+        try:
+            data = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            logger.error("Intent classifier returned non-JSON response:\n%s", raw_json)
+            raise LLMUnavailableError("LLM returned a non-JSON intent classification") from exc
+
+        intent_val = str(data.get("intent", "")).upper()
+        if intent_val not in (
+            "STRUCTURED_QUERY",
+            "UNSTRUCTURED_QUERY",
+            "AMBIGUOUS_QUERY",
+            "GREETING_OR_CHITCHAT",
         ):
-            suggested_strategy = "dedicated_db"
+            logger.error("Intent classifier returned unknown intent %r: %s", intent_val, raw_json)
+            raise LLMUnavailableError(f"LLM returned unknown intent {intent_val!r}")
 
-        if unstruct_score > struct_score and unstruct_score > 0:
-            return SupervisorDecision(
-                intent="UNSTRUCTURED_QUERY",
-                confidence=min(0.99, 0.75 + unstruct_score * 0.08),
-                reasoning=f"Query references unstructured documentation keywords/titles (score: {unstruct_score}).",
-                suggested_strategy=None,
-                relevant_datasets=dataset_info.get("unstructured", []),
-                clarification_question=None,
-            )
-
-        if struct_score > 0:
-            return SupervisorDecision(
-                intent="STRUCTURED_QUERY",
-                confidence=min(0.99, 0.80 + struct_score * 0.05),
-                reasoning=f"Query targets structured data aggregation, calculation, or table filtering (score: {struct_score}).",
-                suggested_strategy=suggested_strategy,
-                relevant_datasets=dataset_info.get("structured", []),
-                clarification_question=None,
-            )
+        strat = data.get("suggested_strategy")
+        if strat not in ("duckdb", "dedicated_db", "pandas_sandbox"):
+            strat = "duckdb"
 
         return SupervisorDecision(
-            intent="UNSTRUCTURED_QUERY",
-            confidence=0.70,
-            reasoning="Defaulting to hybrid document retrieval for open-ended informational query.",
-            suggested_strategy=None,
-            relevant_datasets=dataset_info.get("unstructured", []),
-            clarification_question=None,
+            intent=intent_val,
+            confidence=float(data.get("confidence", 0.95)),
+            reasoning=str(data.get("reasoning", f"LLM classified query as {intent_val}")),
+            suggested_strategy=strat if intent_val == "STRUCTURED_QUERY" else None,
+            relevant_datasets=dataset_info.get(
+                "structured" if intent_val == "STRUCTURED_QUERY" else "unstructured", []
+            ),
+            clarification_question=data.get("clarification_question"),
         )
 
     def _get_dataset_names(self) -> List[str]:

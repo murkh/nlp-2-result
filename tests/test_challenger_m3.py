@@ -52,6 +52,7 @@ from src.observability.telemetry import (
     get_tracer,
 )
 from src.storage.blob_store import get_blob_manager
+from tests.conftest import requires_llm
 
 
 class TestMilestone3IntentRouting(unittest.TestCase):
@@ -137,6 +138,7 @@ class TestMilestone3IntentRouting(unittest.TestCase):
                 f"Compound greeting '{g}' failed to route to GREETING_OR_CHITCHAT, got {decision.intent}",
             )
 
+    @requires_llm
     def test_conversational_helper_false_positive_swallowing(self):
         """Verify queries with 'help me' or 'can you help' that contain structured keywords are NOT swallowed as pure chitchat."""
         queries = [
@@ -187,6 +189,7 @@ class TestMilestone3IntentRouting(unittest.TestCase):
             self.assertIsNotNone(decision.clarification_question)
             self.assertGreaterEqual(len(decision.relevant_datasets), 1)
 
+    @requires_llm
     def test_prompt_injection_safety(self):
         """Verify prompt injection strings do not crash classifier or generate invalid schema."""
         injections = [

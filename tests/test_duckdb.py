@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from src.api.schemas import QueryDuckDBRequest
-from tests.conftest import create_test_fixtures
+from tests.conftest import create_test_fixtures, only_value, requires_llm
 
 
 class TestDuckDBQueryEngine(unittest.TestCase):
@@ -51,6 +51,7 @@ class TestDuckDBQueryEngine(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    @requires_llm
     def test_duckdb_count_query(self):
         """Verify DuckDB counts rows directly over blob storage files."""
         req = QueryDuckDBRequest(query="How many total sales orders exist?")
@@ -58,10 +59,12 @@ class TestDuckDBQueryEngine(unittest.TestCase):
 
         self.assertIsNone(resp.error)
         self.assertEqual(resp.tabular_result.row_count, 1)
-        self.assertEqual(int(resp.tabular_result.rows[0]["total_records"]), 5)
+        # The LLM names its own output column, so assert on the value, not the alias.
+        self.assertEqual(int(only_value(resp.tabular_result)), 5)
         self.assertIn("5", resp.answer)
         self.assertGreater(resp.metrics.total_latency_ms, 0)
 
+    @requires_llm
     def test_duckdb_sum_query(self):
         """Verify DuckDB calculates total revenue over blob files."""
         req = QueryDuckDBRequest(query="What is the total sales revenue?")
@@ -69,9 +72,9 @@ class TestDuckDBQueryEngine(unittest.TestCase):
 
         self.assertIsNone(resp.error)
         self.assertEqual(resp.tabular_result.row_count, 1)
-        total_val = float(resp.tabular_result.rows[0]["total_revenue"])
-        self.assertAlmostEqual(total_val, 1061.55, places=2)
+        self.assertAlmostEqual(float(only_value(resp.tabular_result)), 1061.55, places=2)
 
+    @requires_llm
     def test_duckdb_limit_enforcement(self):
         """Verify DuckDB automatically caps queries to LIMIT 20."""
         req = QueryDuckDBRequest(query="Select all records from sales orders")

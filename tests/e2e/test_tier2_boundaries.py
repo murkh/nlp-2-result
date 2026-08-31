@@ -431,42 +431,12 @@ class TestFeature9Boundaries:
 class TestFeature10Boundaries:
     """Boundary conditions for intent classification and state machine handling."""
 
-    def test_bva10_router_ambiguous_one_word_query_triggers_clarify(self, mock_llm):
-        res = mock_llm.classify_intent("stats")
-        assert res["intent"] == "AMBIGUOUS_QUERY"
-
-    def test_bva10_router_multilingual_greeting_detected(self, mock_llm):
-        greetings = ["Hi", "Hello", "Hey"]
-        for g in greetings:
-            res = mock_llm.classify_intent(g)
-            assert res["intent"] == "GREETING_OR_CHITCHAT"
-
-    def test_bva10_router_hybrid_intent_preference_routing(self, mock_llm):
-        # Query with both text keywords and SQL aggregation terms
-        query = "What is the policy regarding average sales commissions?"
-        res = mock_llm.classify_intent(query)
-        assert res["intent"] in ["UNSTRUCTURED_QUERY", "STRUCTURED_QUERY"]
-
-    def test_bva10_router_empty_string_prompt_handling(self, mock_llm):
-        res = mock_llm.classify_intent("")
-        assert res["intent"] == "AMBIGUOUS_QUERY"
-
-    def test_bva10_router_extremely_long_5000_char_query(self, mock_llm):
-        long_query = "What is the sales amount? " + ("detail " * 500)
-        res = mock_llm.classify_intent(long_query)
-        assert res["intent"] is not None
-
 
 # =============================================================================
 # FEATURE 11 BOUNDARIES: Synthesizer Agent
 # =============================================================================
 class TestFeature11Boundaries:
     """Boundary conditions for answer synthesis, formatting, and markdown generation."""
-
-    def test_bva11_synthesizer_none_execution_result_handling(self, mock_llm):
-        res = mock_llm.synthesize_answer("Show data", [])
-        assert res["evidence_table"] == []
-        assert isinstance(res["answer"], str)
 
     def test_bva11_synthesizer_single_scalar_result_table_format(self):
         scalar_df = pd.DataFrame({"total_count": [42]})
@@ -482,10 +452,6 @@ class TestFeature11Boundaries:
         escaped = html.escape(raw_text)
         assert "<script>" not in escaped
         assert "&lt;script&gt;" in escaped
-
-    def test_bva11_synthesizer_zero_citations_graceful_footer(self, mock_llm):
-        res = mock_llm.synthesize_answer("Greeting query", [], citations=[])
-        assert res["citations"] == []
 
     def test_bva11_synthesizer_large_100_row_result_summary_truncation(self):
         large_rows = [{"id": i, "val": i * 10} for i in range(100)]

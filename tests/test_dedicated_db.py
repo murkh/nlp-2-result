@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from src.api.schemas import QueryDedicatedDBRequest
-from tests.conftest import create_test_fixtures
+from tests.conftest import create_test_fixtures, only_value, requires_llm
 
 
 class TestDedicatedDBEngine(unittest.TestCase):
@@ -52,6 +52,7 @@ class TestDedicatedDBEngine(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    @requires_llm
     def test_count_query_execution(self):
         """Verify counting orders executes correctly and returns scalar count."""
         req = QueryDedicatedDBRequest(query="How many total orders are in the database?")
@@ -59,22 +60,25 @@ class TestDedicatedDBEngine(unittest.TestCase):
 
         self.assertIsNone(resp.error)
         self.assertEqual(resp.tabular_result.row_count, 1)
-        self.assertIn("total_records", resp.tabular_result.columns)
-        self.assertEqual(resp.tabular_result.rows[0]["total_records"], 5)
+        # The LLM names its own output column, so assert on the value, not the alias.
+        self.assertEqual(int(only_value(resp.tabular_result)), 5)
         self.assertIn("5", resp.answer)
         self.assertGreater(resp.metrics.total_latency_ms, 0)
         self.assertGreater(resp.token_usage.total_tokens, 0)
 
+    @requires_llm
     def test_filtered_aggregation_query(self):
-        """Verify filtered query for completed orders."""
+        """Verify a restricting question produces a WHERE predicate and the filtered count."""
         req = QueryDedicatedDBRequest(query="How many orders are completed?")
         resp = self.engine.execute_query(req)
 
         self.assertIsNone(resp.error)
+        self.assertIn("WHERE", resp.sql_query.upper())
         self.assertEqual(resp.tabular_result.row_count, 1)
-        self.assertEqual(resp.tabular_result.rows[0]["completed_count"], 3)
+        self.assertEqual(int(only_value(resp.tabular_result)), 3)
         self.assertIn("3", resp.answer)
 
+    @requires_llm
     def test_sum_revenue_query(self):
         """Verify total sales / revenue aggregation query."""
         req = QueryDedicatedDBRequest(query="What is the total sales revenue?")
@@ -82,10 +86,10 @@ class TestDedicatedDBEngine(unittest.TestCase):
 
         self.assertIsNone(resp.error)
         self.assertEqual(resp.tabular_result.row_count, 1)
-        total_val = float(resp.tabular_result.rows[0]["total_revenue"])
-        self.assertAlmostEqual(total_val, 1061.55, places=2)
+        self.assertAlmostEqual(float(only_value(resp.tabular_result)), 1061.55, places=2)
         self.assertIn("1,061.55", resp.answer)
 
+    @requires_llm
     def test_limit_20_enforcement(self):
         """Verify that queries automatically enforce LIMIT 20."""
         req = QueryDedicatedDBRequest(query="Show me all order records")

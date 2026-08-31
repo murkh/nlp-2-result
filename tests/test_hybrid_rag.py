@@ -10,7 +10,7 @@ from pathlib import Path
 
 from src.api.schemas import QueryUnstructuredRAGRequest
 from src.engines.hybrid_rag import HybridRAGEngine
-from tests.conftest import create_test_fixtures
+from tests.conftest import create_test_fixtures, requires_llm
 
 
 class TestHybridRAGEngine(unittest.TestCase):
@@ -54,6 +54,7 @@ class TestHybridRAGEngine(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    @requires_llm
     def test_hybrid_rag_query_with_citations(self):
         """Verify hybrid RAG query retrieves relevant chunks and returns bracketed citations."""
         req = QueryUnstructuredRAGRequest(
@@ -78,6 +79,7 @@ class TestHybridRAGEngine(unittest.TestCase):
         )
         self.assertIn("15 minutes", resp.answer)
 
+    @requires_llm
     def test_incident_response_query(self):
         """Verify retrieval for incident post-mortem policy."""
         req = QueryUnstructuredRAGRequest(

@@ -12,7 +12,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional
+from typing import Generator, List
 
 import numpy as np
 import pandas as pd
@@ -54,105 +54,6 @@ class MockEmbeddingProvider:
         if norm_a == 0 or norm_b == 0:
             return 0.0
         return float(np.dot(a, b) / (norm_a * norm_b))
-
-
-# -----------------------------------------------------------------------------
-# Mock LLM & Intent Classifier
-# -----------------------------------------------------------------------------
-class MockLLMProvider:
-    """Deterministic LLM responses for SQL, Python DataFrame, Intent, and Synthesis."""
-
-    @staticmethod
-    def classify_intent(query: str) -> Dict[str, Any]:
-        q_lower = query.lower().strip()
-        greetings = ["hello", "hi", "hey", "what can you do", "help", "who are you", "good morning"]
-        if any(g in q_lower for g in greetings) and len(q_lower.split()) <= 6:
-            return {
-                "intent": "GREETING_OR_CHITCHAT",
-                "suggested_strategy": "direct",
-                "response": "Hello! I am your Multi-Agent Knowledge Base assistant. How can I help you today?",
-            }
-
-        ambiguous = [
-            "data",
-            "show me stats",
-            "analyze",
-            "report",
-            "insights",
-            "what do you have",
-            "stats",
-            "revenue",
-            "show sales",
-        ]
-        if q_lower in ambiguous or len(q_lower.split()) <= 1 or not q_lower:
-            return {
-                "intent": "AMBIGUOUS_QUERY",
-                "suggested_strategy": "clarify",
-                "candidate_datasets": ["sales_q3", "customer_churn", "financial_records"],
-                "response": "Your query is ambiguous. Which dataset would you like to analyze? Options: sales_q3, customer_churn, financial_records.",
-            }
-
-        unstructured_keywords = [
-            "policy",
-            "document",
-            "contract",
-            "section",
-            "paragraph",
-            "article",
-            "clause",
-            "guidelines",
-            "manual",
-            "handbook",
-        ]
-        if any(w in q_lower for w in unstructured_keywords):
-            return {
-                "intent": "UNSTRUCTURED_QUERY",
-                "suggested_strategy": "unstructured_rag",
-                "response": "Executing hybrid dense + sparse RAG search across indexed documents.",
-            }
-
-        return {
-            "intent": "STRUCTURED_QUERY",
-            "suggested_strategy": "dedicated_db",
-            "response": "Executing structured query against dedicated database/DuckDB/sandbox.",
-        }
-
-    @staticmethod
-    def generate_sql(query: str, schema_ddl: str, dialect: str = "postgres") -> str:
-        q_lower = query.lower()
-        if "top" in q_lower and "sales" in q_lower:
-            return "SELECT region, SUM(amount) AS total_sales FROM tbl_sales GROUP BY region ORDER BY total_sales DESC LIMIT 20;"
-        if "count" in q_lower or "how many" in q_lower:
-            return "SELECT COUNT(*) AS total_count FROM tbl_sales LIMIT 20;"
-        if "average" in q_lower or "avg" in q_lower:
-            return "SELECT AVG(amount) AS average_amount FROM tbl_sales LIMIT 20;"
-        return "SELECT * FROM tbl_sales LIMIT 20;"
-
-    @staticmethod
-    def generate_pandas_code(query: str) -> str:
-        return (
-            "import pandas as pd\n"
-            "df = pd.read_parquet(file_path)\n"
-            "result_df = df.groupby('region')['amount'].sum().reset_index().sort_values('amount', ascending=False).head(20)\n"
-        )
-
-    @staticmethod
-    def synthesize_answer(
-        query: str, evidence: List[Dict[str, Any]], citations: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
-        return {
-            "answer": f"Based on the dataset, total records analyzed: {len(evidence)}. The top region by sales is North.",
-            "evidence_table": evidence[:5],
-            "citations": (
-                citations if citations is not None else ["[Doc1, Page 2]", "[Doc2, Section 3.1]"]
-            ),
-            "telemetry": {
-                "prompt_tokens": 340,
-                "completion_tokens": 120,
-                "total_tokens": 460,
-                "latency_ms": 45.2,
-            },
-        }
 
 
 # -----------------------------------------------------------------------------
@@ -270,11 +171,6 @@ class InMemoryTestDB:
 @pytest.fixture(scope="session")
 def mock_embeddings():
     return MockEmbeddingProvider()
-
-
-@pytest.fixture(scope="session")
-def mock_llm():
-    return MockLLMProvider()
 
 
 @pytest.fixture(scope="function")

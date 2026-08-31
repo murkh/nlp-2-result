@@ -5,9 +5,10 @@ with Reciprocal Rank Fusion (RRF k=60) and grounded response synthesis
 with exact bracketed citations [Doc: <name>, Page: <page>, Chunk: <index>].
 """
 
+import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from src.api.schemas import (
     Citation,
@@ -22,7 +23,9 @@ from src.config import Settings, get_settings
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import QueryLog
 from src.ingestion.metadata_extractor import EmbeddingService
-from src.llm import get_openai_client
+from src.llm import LLMUnavailableError, require_openai_client
+
+logger = logging.getLogger(__name__)
 
 
 class HybridRAGEngine:
@@ -39,7 +42,6 @@ class HybridRAGEngine:
         self.db_manager = db_manager or get_db_manager()
         self.embedding_service = embedding_service or EmbeddingService()
         self.settings = settings or get_settings()
-        self._openai_client = get_openai_client(self.settings)
 
     def execute_query(
         self,
@@ -122,9 +124,33 @@ class HybridRAGEngine:
 
         # 3. Synthesize grounded answer with dynamic LLM thought
         synth_start = time.perf_counter()
-        answer, llm_thought, synth_tokens = self._synthesize_grounded_answer(
-            query_text, full_context, citations, raw_chunks
-        )
+        try:
+            answer, llm_thought, synth_tokens = self._synthesize_grounded_answer(
+                query_text, full_context
+            )
+        except LLMUnavailableError as exc:
+            total_lat = (time.perf_counter() - start_time) * 1000.0
+            self.db_manager.log_query(
+                QueryLog(
+                    query_text=query_text,
+                    engine="unstructured_hybrid_rag",
+                    status="ERROR",
+                    latency_ms=total_lat,
+                    error_message=str(exc),
+                )
+            )
+            return QueryUnstructuredRAGResponse(
+                query=query_text,
+                answer=f"Answer synthesis failed: {exc}",
+                citations=citations,
+                retrieved_chunks_count=len(citations),
+                metrics=ExecutionMetrics(
+                    engine_execution_ms=engine_latency_ms,
+                    synthesis_ms=(time.perf_counter() - synth_start) * 1000.0,
+                    total_latency_ms=total_lat,
+                ),
+                error=str(exc),
+            )
         synth_latency_ms = (time.perf_counter() - synth_start) * 1000.0
 
         total_lat = (time.perf_counter() - start_time) * 1000.0
@@ -204,9 +230,10 @@ class HybridRAGEngine:
         )
 
     def _synthesize_grounded_answer(
-        self, query: str, context: str, citations: List[Citation], raw_chunks: List[Dict[str, Any]]
+        self, query: str, context: str
     ) -> Tuple[str, Optional[str], Tuple[int, int]]:
-        """Synthesize natural language answer strictly supported by context chunks."""
+        """Synthesize an answer grounded in the retrieved chunks. Raises LLMUnavailableError."""
+        client = require_openai_client(self.settings)
         prompt = (
             f"You are a precise AI knowledge assistant. Answer the user's question using ONLY the retrieved excerpts below.\n\n"
             f"Retrieved Document Context:\n{context}\n\n"
@@ -220,77 +247,33 @@ class HybridRAGEngine:
 
         prompt_tokens = max(1, len(prompt) // 4)
 
-        if self._openai_client:
-            try:
-                resp = self._openai_client.chat.completions.create(
-                    model=self.settings.openai_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.0,
-                )
-                raw_text = resp.choices[0].message.content or ""
+        try:
+            resp = client.chat.completions.create(
+                model=self.settings.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+            )
+            raw_text = resp.choices[0].message.content or ""
+        except Exception as exc:
+            logger.exception(
+                "RAG synthesis call failed (model=%s, base_url=%s)",
+                self.settings.openai_model,
+                self.settings.openai_api_url,
+            )
+            raise LLMUnavailableError(f"LLM call failed: {exc}") from exc
 
-                thought = None
-                ans = raw_text
-                blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
-                for lang, content in blocks:
-                    lang_clean = lang.lower().strip()
-                    if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
-                        thought = content.strip()
-                        ans = raw_text.replace(f"```{lang}\n{content}```", "").strip()
+        thought = None
+        ans = raw_text
+        blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
+        for lang, content in blocks:
+            lang_clean = lang.lower().strip()
+            if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
+                thought = content.strip()
+                ans = raw_text.replace(f"```{lang}\n{content}```", "").strip()
 
-                comp_tokens = (
-                    resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
-                )
-                return ans.strip(), thought, (prompt_tokens, comp_tokens)
-            except Exception:
-                pass
+        if not ans.strip():
+            logger.error("LLM returned an empty answer. Raw response:\n%s", raw_text)
+            raise LLMUnavailableError("LLM returned an empty answer")
 
-        # Deterministic grounded synthesizer
-        ans = self._deterministic_rag_synthesis(query, citations, raw_chunks)
-        comp_tokens = max(1, len(ans) // 4)
-        return ans, None, (prompt_tokens, comp_tokens)
-
-    def _deterministic_rag_synthesis(
-        self, query: str, citations: List[Citation], raw_chunks: List[Dict[str, Any]]
-    ) -> str:
-        """Deterministic RAG answer synthesis referencing relevant retrieved sentences."""
-        if not citations or not raw_chunks:
-            return "Based on the provided documents, I could not find information to answer this question."
-
-        query_terms = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
-
-        best_score = -1
-        best_sentence = ""
-        best_cite = citations[0]
-
-        for idx, (cite, chunk) in enumerate(zip(citations, raw_chunks)):
-            content = chunk.get("content", "")
-            # Split into clean sentences
-            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", content) if s.strip()]
-            for s in sentences:
-                if s.startswith("#"):
-                    continue
-                s_words = [w.lower() for w in re.findall(r"\w+", s)]
-                match_count = 0
-                for qt in query_terms:
-                    for sw in s_words:
-                        if qt == sw or (len(qt) >= 4 and len(sw) >= 4 and qt[:4] == sw[:4]):
-                            match_count += 1
-                            break
-                if match_count > best_score:
-                    best_score = match_count
-                    best_sentence = s
-                    best_cite = cite
-
-        if not best_sentence or best_score <= 0:
-            content = raw_chunks[0].get("content", "")
-            clean_lines = [
-                l.strip()
-                for l in content.split("\n")
-                if l.strip() and not l.strip().startswith("#")
-            ]
-            best_sentence = clean_lines[0] if clean_lines else content[:150]
-            best_cite = citations[0]
-
-        cite_tag = f"[Doc: {best_cite.document_name}, Page: {best_cite.page_number or 1}, Chunk: {best_cite.chunk_index}]"
-        return f"{best_sentence} {cite_tag}"
+        comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+        return ans.strip(), thought, (prompt_tokens, comp_tokens)

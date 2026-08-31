@@ -542,12 +542,7 @@ class TestFeature4TwoStageSchemaPruner:
 class TestFeature5StrategyAPostgreSQL:
     """Verifies Strategy A (Dedicated DB Text2SQL generation, read-only mode, LIMIT 20)."""
 
-    def test_f05_dedicated_db_sql_generation_and_execution(self, mock_llm, sample_data_dir):
-        query = "What is the total sales amount by region?"
-        sql = mock_llm.generate_sql(query, "CREATE TABLE tbl_sales (region TEXT, amount FLOAT);")
-        assert "SELECT" in sql.upper()
-        assert "LIMIT 20" in sql.upper()
-
+    def test_f05_dedicated_db_sql_generation_and_execution(self, sample_data_dir):
         # Test executing query against in-memory dataframe (mimicking postgres engine)
         df = sample_data_dir["sales_df"]
         result = df.groupby("region")["amount"].sum().reset_index().head(20)
@@ -585,7 +580,7 @@ class TestFeature5StrategyAPostgreSQL:
         assert len(agg) == 4
         assert set(agg["region"]) == {"North", "South", "East", "West"}
 
-    def test_f05_dedicated_db_telemetry_payload_structure(self, mock_llm):
+    def test_f05_dedicated_db_telemetry_payload_structure(self):
         telemetry = {
             "engine": "dedicated_db",
             "prompt_tokens": 180,
@@ -775,15 +770,6 @@ class TestFeature8UnstructuredHybridRAG:
         assert score_A == score_B
         assert score_A > score_C
 
-    def test_f08_hybrid_rag_endpoint_response_structure(self, mock_llm):
-        evidence = [{"chunk_id": "c1", "content": "Sample text", "score": 0.85}]
-        response = mock_llm.synthesize_answer(
-            "What is the security model?", evidence, ["[SecurityDoc, Page 1]"]
-        )
-        assert "answer" in response
-        assert "citations" in response
-        assert len(response["citations"]) >= 1
-
     def test_f08_bracketed_citation_generation(self):
         citation = "[ArchitectureDoc, Section 2.1]"
         assert citation.startswith("[")
@@ -851,28 +837,6 @@ class TestFeature9BenchmarkArena:
 class TestFeature10LangGraphSupervisorRouter:
     """Verifies intent routing for Greetings, Ambiguous, Structured, and Unstructured."""
 
-    def test_f10_router_greeting_chitchat_short_circuit(self, mock_llm):
-        res = mock_llm.classify_intent("Hello! How can you help me?")
-        assert res["intent"] == "GREETING_OR_CHITCHAT"
-        assert res["suggested_strategy"] == "direct"
-        assert len(res["response"]) > 0
-
-    def test_f10_router_ambiguous_query_dataset_suggestions(self, mock_llm):
-        res = mock_llm.classify_intent("analyze")
-        assert res["intent"] == "AMBIGUOUS_QUERY"
-        assert res["suggested_strategy"] == "clarify"
-        assert "candidate_datasets" in res
-        assert len(res["candidate_datasets"]) > 0
-
-    def test_f10_router_structured_query_routing(self, mock_llm):
-        res = mock_llm.classify_intent("What is the average transaction amount in Q2?")
-        assert res["intent"] == "STRUCTURED_QUERY"
-
-    def test_f10_router_unstructured_query_routing(self, mock_llm):
-        res = mock_llm.classify_intent("What does the company security policy say about tokens?")
-        assert res["intent"] == "UNSTRUCTURED_QUERY"
-        assert res["suggested_strategy"] == "unstructured_rag"
-
     def test_f10_router_state_machine_transition_graph(self):
         # LangGraph State machine schema
         state = {
@@ -902,11 +866,6 @@ class TestFeature10LangGraphSupervisorRouter:
 class TestFeature11SynthesizerAgent:
     """Verifies natural language answers, markdown tables, evidence, and citations."""
 
-    def test_f11_synthesizer_natural_language_answer_formatting(self, mock_llm):
-        res = mock_llm.synthesize_answer("Summarize orders", [{"order_id": 101, "amount": 250}])
-        assert isinstance(res["answer"], str)
-        assert len(res["answer"]) > 10
-
     def test_f11_synthesizer_markdown_table_generation(self, sample_data_dir):
         df = sample_data_dir["sales_df"].head(3)
         headers = list(df.columns)
@@ -916,22 +875,6 @@ class TestFeature11SynthesizerAgent:
         md_table = "\n".join([header_row, sep_row] + data_rows)
         assert "| order_id |" in md_table
         assert "| --- |" in md_table or "|---" in md_table
-
-    def test_f11_synthesizer_data_evidence_inclusion(self, mock_llm):
-        evidence = [{"region": "North", "sales": 560.0}, {"region": "South", "sales": 1070.5}]
-        res = mock_llm.synthesize_answer("Sales by region", evidence)
-        assert res["evidence_table"] == evidence
-
-    def test_f11_synthesizer_citation_linking(self, mock_llm):
-        res = mock_llm.synthesize_answer("Policy query", [], ["[PolicyDoc.pdf, Page 4]"])
-        assert "[PolicyDoc.pdf, Page 4]" in res["citations"]
-
-    def test_f11_synthesizer_telemetry_metadata_assembly(self, mock_llm):
-        res = mock_llm.synthesize_answer("Summary", [])
-        telem = res["telemetry"]
-        assert "prompt_tokens" in telem
-        assert "completion_tokens" in telem
-        assert "latency_ms" in telem
 
 
 # =============================================================================

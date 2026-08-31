@@ -4,6 +4,8 @@ Provides CORS configuration, lifespan startup initialization,
 router registration, and healthcheck endpoints.
 """
 
+import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
@@ -20,6 +22,11 @@ try:
     _has_fastapi = True
 except ImportError:
     _has_fastapi = False
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 
 @asynccontextmanager

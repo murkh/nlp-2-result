@@ -28,7 +28,7 @@ from src.engines.pandas_sandbox.ast_validator import (
 )
 from src.engines.pandas_sandbox.engine import PandasSandboxEngine
 from src.engines.pandas_sandbox.runner import execute_sandboxed_code
-from tests.conftest import create_test_fixtures
+from tests.conftest import create_test_fixtures, only_value, requires_llm
 
 
 class TestASTSecurityAdversarial(unittest.TestCase):
@@ -411,6 +411,7 @@ class TestBenchmarkArenaAdversarial(unittest.TestCase):
     # -------------------------------------------------------------------------
     # 3. Concurrent Multi-Threaded Arena Execution
     # -------------------------------------------------------------------------
+    @requires_llm
     def test_arena_concurrent_execution_thread_safety(self):
         """Verify concurrent execution of Strategy A, B, and C in parallel ThreadPool."""
         req = QueryBenchmarkRequest(query="What is the total sales revenue?")
@@ -421,9 +422,10 @@ class TestBenchmarkArenaAdversarial(unittest.TestCase):
         self.assertEqual(resp.strategy_c.status, "SUCCESS")
         self.assertTrue(resp.benchmark_summary.consensus_reached)
 
-        val_a = float(resp.strategy_a.tabular_result.rows[0]["total_revenue"])
-        val_b = float(resp.strategy_b.tabular_result.rows[0]["total_revenue"])
-        val_c = float(resp.strategy_c.tabular_result.rows[0]["total_revenue"])
+        # Each strategy lets the LLM name its own output column; compare values.
+        val_a = float(only_value(resp.strategy_a.tabular_result))
+        val_b = float(only_value(resp.strategy_b.tabular_result))
+        val_c = float(only_value(resp.strategy_c.tabular_result))
         self.assertAlmostEqual(val_a, 1061.55, places=2)
         self.assertAlmostEqual(val_b, 1061.55, places=2)
         self.assertAlmostEqual(val_c, 1061.55, places=2)

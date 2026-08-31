@@ -16,6 +16,7 @@ from src.api.schemas import (
     ThinkingProcess,
     TokenUsage,
 )
+from src.llm import LLMUnavailableError
 
 try:
     from fastapi import APIRouter
@@ -51,12 +52,21 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
     Structured SQL/DataFrame Engines, and Unstructured Hybrid RAG with Synthesis.
     """
     session_id = request.session_id or str(uuid.uuid4())
-    state = run_agent(
-        query=request.query,
-        session_id=session_id,
-        suggested_strategy=request.suggested_strategy,
-        dataset_ids=request.dataset_ids,
-    )
+    try:
+        state = run_agent(
+            query=request.query,
+            session_id=session_id,
+            suggested_strategy=request.suggested_strategy,
+            dataset_ids=request.dataset_ids,
+        )
+    except LLMUnavailableError as exc:
+        return QueryAgentResponse(
+            query=request.query,
+            session_id=session_id,
+            intent="ERROR",
+            answer=f"Agent routing failed: {exc}",
+            error=str(exc),
+        )
 
     telemetry = state.get("telemetry", {}) or {}
     exec_cols = state.get("execution_columns") or []

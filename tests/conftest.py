@@ -6,6 +6,7 @@ Supports both pytest test runner and standard unittest test execution.
 import os
 import shutil
 import tempfile
+import unittest
 from pathlib import Path
 from typing import Generator
 
@@ -17,10 +18,14 @@ from src.ingestion.unstructured import UnstructuredIngestionEngine
 from src.pruning.schema_pruner import TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager
 
-# Set hermetic test environment variables before modules initialize
-os.environ["OPENAI_API_KEY"] = ""
+# Embeddings stay hermetic; the LLM is never mocked - suites that need it skip without a key.
 os.environ["EMBEDDING_PROVIDER"] = "mock"
 os.environ["STORAGE_DIR"] = "/tmp/test_blobs_root"
+
+# Suites that call the configured LLM for real. No stub client exists by design.
+requires_llm = unittest.skipUnless(
+    os.getenv("OPENAI_API_KEY"), "needs a live LLM (set OPENAI_API_KEY)"
+)
 
 # Conditional pytest import so tests run with stdlib unittest or pytest
 try:
@@ -31,12 +36,20 @@ except ImportError:
     _has_pytest = False
 
 
+def only_value(tabular_result):
+    """Single scalar out of a one-row result, whatever the LLM named the column."""
+    assert tabular_result.row_count == 1, tabular_result.rows
+    row = tabular_result.rows[0]
+    assert len(row) == 1, row
+    return next(iter(row.values()))
+
+
 def create_test_fixtures():
     """Factory helper to construct test objects for unittest or standalone execution."""
     temp_dir = Path(tempfile.mkdtemp(prefix="test_blobs_"))
     test_db = DatabaseManager(in_memory=True)
     blob_mgr = BlobStorageManager(base_path=temp_dir)
-    settings = Settings(openai_api_key="", embedding_provider="mock")
+    settings = Settings(openai_api_key=os.getenv("OPENAI_API_KEY"), embedding_provider="mock")
     emb_service = EmbeddingService(settings=settings)
     meta_extractor = MetadataExtractor(embedding_service=emb_service)
     struct_engine = StructuredIngestionEngine(

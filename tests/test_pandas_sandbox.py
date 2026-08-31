@@ -11,7 +11,7 @@ from src.api.schemas import QueryPandasSandboxRequest
 from src.engines.pandas_sandbox.ast_validator import validate_python_code
 from src.engines.pandas_sandbox.engine import PandasSandboxEngine
 from src.engines.pandas_sandbox.runner import execute_sandboxed_code
-from tests.conftest import create_test_fixtures
+from tests.conftest import create_test_fixtures, only_value, requires_llm
 
 
 class TestPandasSandboxEngine(unittest.TestCase):
@@ -133,6 +133,7 @@ class TestPandasSandboxEngine(unittest.TestCase):
     # -------------------------------------------------------------------------
     # End-to-End Query Execution
     # -------------------------------------------------------------------------
+    @requires_llm
     def test_pandas_sandbox_count_query(self):
         """Verify Strategy C executes count aggregation and returns structured telemetry."""
         req = QueryPandasSandboxRequest(query="How many total orders exist?")
@@ -142,9 +143,11 @@ class TestPandasSandboxEngine(unittest.TestCase):
         self.assertTrue(resp.security_report.ast_passed)
         self.assertFalse(resp.security_report.timeout_occurred)
         self.assertEqual(resp.tabular_result.row_count, 1)
-        self.assertEqual(int(resp.tabular_result.rows[0]["total_records"]), 5)
+        # The LLM names its own output column, so assert on the value, not the alias.
+        self.assertEqual(int(only_value(resp.tabular_result)), 5)
         self.assertIn("5", resp.answer)
 
+    @requires_llm
     def test_pandas_sandbox_sum_query(self):
         """Verify Strategy C calculates total revenue via sandboxed Python."""
         req = QueryPandasSandboxRequest(query="What is the total sales revenue?")
@@ -153,8 +156,7 @@ class TestPandasSandboxEngine(unittest.TestCase):
         self.assertIsNone(resp.error)
         self.assertTrue(resp.security_report.ast_passed)
         self.assertEqual(resp.tabular_result.row_count, 1)
-        val = float(resp.tabular_result.rows[0]["total_revenue"])
-        self.assertAlmostEqual(val, 1061.55, places=2)
+        self.assertAlmostEqual(float(only_value(resp.tabular_result)), 1061.55, places=2)
 
 
 if __name__ == "__main__":

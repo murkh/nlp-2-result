@@ -25,6 +25,7 @@ from src.ingestion.metadata_extractor import EmbeddingService, MetadataExtractor
 from src.ingestion.structured import StructuredIngestionEngine
 from src.ingestion.unstructured import UnstructuredIngestionEngine
 from src.storage.blob_store import get_blob_manager
+from tests.conftest import requires_llm
 
 
 class TestAgentRouter(unittest.TestCase):
@@ -133,6 +134,7 @@ class TestAgentRouter(unittest.TestCase):
             self.assertIn("broad", decision.clarification_question.lower())
             self.assertGreaterEqual(len(decision.relevant_datasets), 1)
 
+    @requires_llm
     def test_router_structured_queries(self):
         """Verify calculation, aggregation, and filtering queries route to STRUCTURED_QUERY."""
         queries = [
@@ -152,22 +154,28 @@ class TestAgentRouter(unittest.TestCase):
             self.assertGreaterEqual(decision.confidence, 0.75)
             self.assertIn(decision.suggested_strategy, ["duckdb", "dedicated_db", "pandas_sandbox"])
 
+    @requires_llm
     def test_router_strategy_hints(self):
-        """Verify query strategy hints route to the requested engine."""
-        d_pandas = self.router.classify_intent(
-            "Run pandas dataframe analysis to count completed orders"
-        )
-        self.assertEqual(d_pandas.intent, "STRUCTURED_QUERY")
-        self.assertEqual(d_pandas.suggested_strategy, "pandas_sandbox")
+        """Engine-hinted queries stay STRUCTURED_QUERY and pick a valid engine.
 
-        d_postgres = self.router.classify_intent("Query dedicated postgres table for total sales")
-        self.assertEqual(d_postgres.intent, "STRUCTURED_QUERY")
-        self.assertEqual(d_postgres.suggested_strategy, "dedicated_db")
+        The keyword-to-engine mapping is now a prompt instruction, not a heuristic
+        fallback, so the exact engine is the classifier's call, not a hard guarantee.
+        """
+        hinted = [
+            "Run pandas dataframe analysis to count completed orders",
+            "Query dedicated postgres table for total sales",
+            "How many total orders?",
+        ]
+        for q in hinted:
+            decision = self.router.classify_intent(q)
+            self.assertEqual(decision.intent, "STRUCTURED_QUERY", q)
+            self.assertIn(
+                decision.suggested_strategy,
+                ["duckdb", "dedicated_db", "pandas_sandbox"],
+                q,
+            )
 
-        d_duckdb = self.router.classify_intent("How many total orders?")
-        self.assertEqual(d_duckdb.intent, "STRUCTURED_QUERY")
-        self.assertEqual(d_duckdb.suggested_strategy, "duckdb")
-
+    @requires_llm
     def test_router_unstructured_queries(self):
         """Verify documentation and policy questions route to UNSTRUCTURED_QUERY."""
         queries = [
@@ -185,6 +193,7 @@ class TestAgentRouter(unittest.TestCase):
             )
             self.assertGreaterEqual(decision.confidence, 0.75)
 
+    @requires_llm
     def test_router_mixed_greeting_with_question(self):
         """Verify polite greetings combined with questions prioritize the substantive intent."""
         d_struct = self.router.classify_intent("Hello! How many completed orders are there?")
@@ -227,6 +236,7 @@ class TestAgentRouter(unittest.TestCase):
         self.assertEqual(res["telemetry"]["route"], "AMBIGUOUS_QUERY")
         self.assertGreaterEqual(len(res["candidate_datasets"]), 1)
 
+    @requires_llm
     def test_graph_structured_execution(self):
         """Verify graph execution on structured query runs engine and synthesizes table/answer."""
         res = run_agent(query="How many total orders are there?", session_id="sess_struct_1")
@@ -238,6 +248,7 @@ class TestAgentRouter(unittest.TestCase):
         self.assertTrue(res["telemetry"]["execution_success"])
         self.assertGreater(res["telemetry"]["total_tokens"], 0)
 
+    @requires_llm
     def test_graph_unstructured_execution(self):
         """Verify graph execution on unstructured query retrieves chunks and includes citations."""
         res = run_agent(
@@ -305,6 +316,7 @@ class TestAgentRouter(unittest.TestCase):
     # API Route Integration Tests
     # -------------------------------------------------------------------------
 
+    @requires_llm
     def test_api_agent_endpoint(self):
         """Verify POST /query/agent endpoint processes requests and returns QueryAgentResponse."""
         req_greet = QueryAgentRequest(query="Hello there!", session_id="api_sess_1")

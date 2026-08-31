@@ -5,6 +5,7 @@ executes queries in read-only transactions with LIMIT 20 guardrails,
 and synthesizes evidence-backed natural language answers.
 """
 
+import logging
 import os
 import re
 import time
@@ -22,9 +23,11 @@ from src.api.schemas import (
 from src.config import Settings, get_settings
 from src.database.connection import DatabaseManager, get_db_manager
 from src.database.models import QueryLog
-from src.llm import get_openai_client
+from src.llm import LLMUnavailableError, require_openai_client
 from src.pruning.schema_pruner import PrunedSchemaContext, TwoStageSchemaPruner
 from src.storage.blob_store import BlobStorageManager, get_blob_manager
+
+logger = logging.getLogger(__name__)
 
 FORBIDDEN_SQL_PATTERNS = [
     r"\b(DROP|DELETE|UPDATE|INSERT|ALTER|CREATE|TRUNCATE|GRANT|REVOKE)\b",
@@ -85,7 +88,6 @@ class DedicatedDBEngine:
             db_manager=self.db_manager, blob_manager=self.blob_manager
         )
         self.settings = settings or get_settings()
-        self._openai_client = get_openai_client(self.settings)
 
     def execute_query(
         self,
@@ -112,7 +114,30 @@ class DedicatedDBEngine:
 
         # 2. Generate SQL query with LLM thought extraction
         gen_start = time.perf_counter()
-        sql_query, llm_thought, gen_tokens = self._generate_sql(query_text, pruned_context)
+        try:
+            sql_query, llm_thought, gen_tokens = self._generate_sql(query_text, pruned_context)
+        except LLMUnavailableError as exc:
+            gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
+            total_lat = (time.perf_counter() - start_time) * 1000.0
+            self.db_manager.log_query(
+                QueryLog(
+                    query_text=query_text,
+                    engine="strategy_a_dedicated_db",
+                    status="ERROR",
+                    latency_ms=total_lat,
+                    error_message=str(exc),
+                )
+            )
+            return QueryDedicatedDBResponse(
+                query=query_text,
+                answer=f"SQL generation failed: {exc}",
+                sql_query="",
+                tabular_result=TabularResult(columns=[], rows=[], row_count=0),
+                metrics=ExecutionMetrics(
+                    query_generation_ms=gen_latency_ms, total_latency_ms=total_lat
+                ),
+                error=str(exc),
+            )
         gen_latency_ms = (time.perf_counter() - gen_start) * 1000.0
 
         # 3. Validate security and guardrails
@@ -271,101 +296,53 @@ class DedicatedDBEngine:
     def _generate_sql(
         self, query: str, context: PrunedSchemaContext
     ) -> Tuple[str, Optional[str], Tuple[int, int]]:
-        """Generate PostgreSQL SQL query using LLM or rule-based generator."""
+        """Generate a PostgreSQL query with the configured LLM. Raises LLMUnavailableError."""
+        client = require_openai_client(self.settings)
         prompt = (
             f"You are an expert PostgreSQL data analyst. Write a valid read-only PostgreSQL query.\n"
             f"Schema:\n{context.ddl_prompt_snippet}\n"
             f"Question: {query}\n\n"
             f"Instructions:\n"
             f"1. In a ```thought block, explain your step-by-step reasoning: which tables/columns you selected, filtering/aggregation logic, and why.\n"
-            f"2. In a ```sql block, write ONLY the valid PostgreSQL SELECT query."
+            f"2. In a ```sql block, write ONLY the valid PostgreSQL SELECT query.\n"
+            f"3. Translate every condition in the question into an explicit WHERE predicate. "
+            f"Use the '-- samples:' values in the schema for exact literal spellings and casing. "
+            f"Never aggregate over the whole table when the question restricts rows."
         )
 
         prompt_tokens = max(1, len(prompt) // 4)
 
-        if self._openai_client:
-            try:
-                resp = self._openai_client.chat.completions.create(
-                    model=self.settings.openai_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.0,
-                )
-                raw_text = resp.choices[0].message.content or ""
-
-                thought = None
-                sql = None
-                blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
-                for lang, content in blocks:
-                    lang_clean = lang.lower().strip()
-                    if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
-                        thought = content.strip()
-                    elif lang_clean in ("sql", "postgresql", "postgres"):
-                        sql = content.strip()
-
-                if not sql:
-                    sql_match = re.search(r"```(?:sql)?(.*?)```", raw_text, re.DOTALL)
-                    sql = sql_match.group(1).strip() if sql_match else raw_text.strip()
-
-                comp_tokens = (
-                    resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
-                )
-                return sql, thought, (prompt_tokens, comp_tokens)
-            except Exception:
-                pass
-
-        # Deterministic Text2SQL generator
-        sql = self._deterministic_text2sql(query, context)
-        comp_tokens = max(1, len(sql) // 4)
-        return sql, None, (prompt_tokens, comp_tokens)
-
-    def _deterministic_text2sql(self, query: str, context: PrunedSchemaContext) -> str:
-        """Deterministic Text2SQL generator mapping query intent to valid PostgreSQL query."""
-        if not context.table_names:
-            return "SELECT 1 AS status;"
-
-        primary_table = context.table_names[0]
-        retained_cols = context.retained_columns.get(primary_table, [])
-        lower_q = query.lower()
-
-        # Check for count query
-        if "how many" in lower_q or "count" in lower_q or "total number" in lower_q:
-            if "status" in lower_q and "status" in retained_cols:
-                return f'SELECT "status", COUNT(*) AS total_count FROM "{primary_table}" GROUP BY "status" ORDER BY total_count DESC LIMIT 20;'
-            if "completed" in lower_q and "status" in retained_cols:
-                return f'SELECT COUNT(*) AS completed_count FROM "{primary_table}" WHERE LOWER("status") = \'completed\';'
-            return f'SELECT COUNT(*) AS total_records FROM "{primary_table}";'
-
-        # Check for sum / average query
-        amount_col = next(
-            (
-                c
-                for c in retained_cols
-                if "amount" in c.lower()
-                or "price" in c.lower()
-                or "total" in c.lower()
-                or "sales" in c.lower()
-            ),
-            None,
-        )
-        if ("sum" in lower_q or "total sales" in lower_q or "revenue" in lower_q) and amount_col:
-            city_col = next(
-                (c for c in retained_cols if "city" in c.lower() or "country" in c.lower()), None
+        try:
+            resp = client.chat.completions.create(
+                model=self.settings.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
             )
-            if city_col and ("by city" in lower_q or "per city" in lower_q or "top" in lower_q):
-                return f'SELECT "{city_col}", SUM("{amount_col}") AS total_revenue FROM "{primary_table}" GROUP BY "{city_col}" ORDER BY total_revenue DESC LIMIT 20;'
-            return f'SELECT SUM("{amount_col}") AS total_revenue FROM "{primary_table}";'
+            raw_text = resp.choices[0].message.content or ""
+        except Exception as exc:
+            logger.exception(
+                "PostgreSQL SQL generation call failed (model=%s, base_url=%s)",
+                self.settings.openai_model,
+                self.settings.openai_api_url,
+            )
+            raise LLMUnavailableError(f"LLM call failed: {exc}") from exc
 
-        if ("average" in lower_q or "avg" in lower_q) and amount_col:
-            return f'SELECT AVG("{amount_col}") AS average_amount FROM "{primary_table}";'
+        thought = None
+        sql = None
+        blocks = re.findall(r"```(\w*)\n(.*?)```", raw_text, re.DOTALL)
+        for lang, content in blocks:
+            lang_clean = lang.lower().strip()
+            if lang_clean in ("thought", "thinking", "reasoning", "explanation"):
+                thought = content.strip()
+            elif lang_clean in ("sql", "postgresql", "postgres"):
+                sql = content.strip()
 
-        # Check for top N / highest
-        if ("highest" in lower_q or "top" in lower_q or "most expensive" in lower_q) and amount_col:
-            return f'SELECT * FROM "{primary_table}" ORDER BY "{amount_col}" DESC LIMIT 20;'
+        if not sql:
+            logger.error("LLM response contained no ```sql block. Raw response:\n%s", raw_text)
+            raise LLMUnavailableError("LLM response contained no ```sql block")
 
-        # General SELECT
-        selected_cols = [f'"{c}"' for c in retained_cols[:6]] if retained_cols else ["*"]
-        cols_clause = ", ".join(selected_cols)
-        return f'SELECT {cols_clause} FROM "{primary_table}" LIMIT 20;'
+        comp_tokens = resp.usage.completion_tokens if resp.usage else max(1, len(raw_text) // 4)
+        return sql, thought, (prompt_tokens, comp_tokens)
 
     def _synthesize_answer(
         self, query: str, sql: str, result: TabularResult
