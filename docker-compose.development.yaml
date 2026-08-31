@@ -1,0 +1,54 @@
+# Development stack: infrastructure only.
+# Backend and frontend run on the host (see .vscode/launch.json) so they can be debugged.
+# Reuses the SAME named volume as docker-compose.yml (nlp-2-result_postgres_data),
+# so already-ingested data survives — do not rename it.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: nlp_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: knowledge_base
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - nlp_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d knowledge_base"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: nlp_langfuse
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: devsecretkey1234567890
+      SALT: devsaltkey1234567890
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    networks:
+      - nlp_network
+
+networks:
+  nlp_network:
+    driver: bridge
+
+volumes:
+  # Created by docker-compose.yml; bound by explicit name so the project name
+  # can never fork it into a second, empty volume.
+  postgres_data:
+    external: true
+    name: nlp-2-result_postgres_data

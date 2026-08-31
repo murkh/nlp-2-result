@@ -1,0 +1,63 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend (FastAPI)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "src.main:app",
+        "--reload",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        // Same DB/credentials/volume as docker-compose.yml — reuses ingested data.
+        // psycopg (sync) URL must NOT carry +asyncpg or it falls back to in-memory SQLite.
+        "DATABASE_URL": "postgresql://postgres:postgrespassword@localhost:5432/knowledge_base",
+        "ASYNC_DATABASE_URL": "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/knowledge_base",
+        "BLOB_STORAGE_PATH": "${workspaceFolder}/data/blob",
+        "EMBEDDING_PROVIDER": "fastembed",
+        "EMBEDDING_DIM": "384",
+        "LANGFUSE_HOST": "http://localhost:3000"
+      },
+      "preLaunchTask": "dev-infra-up",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Frontend (Streamlit)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": [
+        "run",
+        "frontend/ui.py",
+        "--server.port",
+        "8501"
+      ],
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "BACKEND_URL": "http://localhost:8000"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack (Backend + Frontend)",
+      "configurations": ["Backend (FastAPI)", "Frontend (Streamlit)"],
+      "preLaunchTask": "dev-infra-up",
+      "stopAll": true
+    }
+  ]
+}

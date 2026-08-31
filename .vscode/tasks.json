@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev-infra-up",
+      "type": "shell",
+      "command": "docker compose -f docker-compose.development.yaml up -d --wait postgres langfuse",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "dev-infra-down",
+      "type": "shell",
+      "command": "docker compose -f docker-compose.development.yaml down",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ]
+}
