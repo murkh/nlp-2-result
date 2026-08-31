@@ -251,6 +251,9 @@ def execute_sandboxed_code(
             "PYTHONUNBUFFERED": "1",
             "LC_ALL": "en_US.UTF-8",
             "LANG": "en_US.UTF-8",
+            # LC_ALL/LANG are ignored on Windows; force UTF-8 child I/O explicitly.
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
         }
         if "PYTHONPATH" in os.environ:
             clean_env["PYTHONPATH"] = os.environ["PYTHONPATH"]
@@ -260,6 +263,8 @@ def execute_sandboxed_code(
                 [sys.executable, "-c", WRAPPER_TEMPLATE],
                 input=code,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 capture_output=True,
                 timeout=timeout_seconds,
                 cwd=temp_dir,
