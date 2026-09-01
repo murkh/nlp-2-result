@@ -10,6 +10,7 @@ from fastapi import APIRouter
 
 
 from src.agent.graph import run_agent
+from src.agent.state import STRATEGY_LABEL
 from src.api.schemas import (
     DecisionStep,
     ExecutionMetrics,
@@ -26,26 +27,11 @@ router = APIRouter(prefix="/query", tags=["Agent Orchestration"])
 
 
 def _loop_steps(loop: Dict[str, Any], offset: int) -> List[DecisionStep]:
-    """One decision step per correction attempt, plus one for the probes."""
+    """One decision step per correction attempt."""
     if not loop:
         return []
 
     steps: List[DecisionStep] = []
-    tool_calls = loop.get("tool_calls") or 0
-    if tool_calls:
-        steps.append(
-            DecisionStep(
-                step_number=offset + len(steps) + 1,
-                title="Schema Value Grounding",
-                choice=f"Inspected the data {tool_calls} time(s)",
-                reasoning=(
-                    "Read the stored values before writing the query, so filters match "
-                    "the real spelling and casing instead of a guess."
-                ),
-                details={"tool_calls": tool_calls},
-            )
-        )
-
     attempts = loop.get("attempts") or []
     for record in attempts[1:]:
         steps.append(
@@ -83,14 +69,13 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
     """
     Conversational LangGraph Multi-Agent Supervisor Q&A Endpoint.
     Routes queries between Greeting/Chitchat, Ambiguous Clarification,
-    Structured SQL/DataFrame Engines, and Unstructured Hybrid RAG with Synthesis.
+    the Structured Python/Pandas Engine, and Unstructured Hybrid RAG with Synthesis.
     """
     session_id = request.session_id or str(uuid.uuid4())
     try:
         state = run_agent(
             query=request.query,
             session_id=session_id,
-            suggested_strategy=request.suggested_strategy,
             dataset_ids=request.dataset_ids,
         )
     except LLMUnavailableError as exc:
@@ -122,7 +107,6 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
     intent = state.get("intent", "GREETING_OR_CHITCHAT")
     confidence = state.get("confidence", 0.95)
     routing_reason = state.get("routing_reason", "")
-    suggested_strategy = state.get("suggested_strategy")
     candidate_datasets = state.get("candidate_datasets", [])
     gen_code = state.get("generated_code")
     citations = state.get("citations", [])
@@ -163,31 +147,21 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
             )
         )
     elif intent == "STRUCTURED_QUERY":
-        strat_name = (
-            "DuckDB (Strategy B)"
-            if suggested_strategy == "duckdb"
-            else (
-                "PostgreSQL (Strategy A)"
-                if suggested_strategy == "dedicated_db"
-                else "Pandas Sandbox (Strategy C)"
-            )
-        )
         steps.append(
             DecisionStep(
                 step_number=2,
-                title="Engine Dispatch & Strategy Selection",
-                choice=f"Dispatched to {strat_name}",
-                reasoning=f"Selected {strat_name} to execute structured aggregation and filtering over tabular datasets.",
-                details={"strategy": suggested_strategy},
+                title="Engine Dispatch",
+                choice="Dispatched to the Pandas Sandbox",
+                reasoning="Dispatched to the sandboxed Python/Pandas engine to execute structured aggregation and filtering over tabular datasets.",
+                details={"strategy": STRATEGY_LABEL},
             )
         )
         if gen_code:
-            lang = "Python" if suggested_strategy == "pandas_sandbox" else "SQL"
             steps.append(
                 DecisionStep(
                     step_number=3,
-                    title=f"{lang} Query & Code Formulation",
-                    choice=f"Generated {lang} with LIMIT 20 safety ceiling",
+                    title="Python Query & Code Formulation",
+                    choice="Generated Python with LIMIT 20 safety ceiling",
                     reasoning="Synthesized executable transformation code adhering to schema column definitions.",
                     details={"code": gen_code},
                 )
@@ -201,22 +175,6 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
                 reasoning="Executed query inside sandbox/engine and extracted structured records without mutations.",
             )
         )
-        critic = (telemetry or {}).get("projection_critic")
-        if critic:
-            added = ", ".join(critic.get("added_columns", []))
-            steps.append(
-                DecisionStep(
-                    step_number=len(steps) + 1,
-                    title="Projection Critic",
-                    choice=f"Widened projection with: {added}",
-                    reasoning=(
-                        "The initial query returned too few columns to verify the answer. "
-                        "Added the human-readable identifier, the compared columns, and the "
-                        "measures, then re-executed."
-                    ),
-                    details=critic,
-                )
-            )
     elif intent == "UNSTRUCTURED_QUERY":
         steps.append(
             DecisionStep(
@@ -256,7 +214,7 @@ async def query_agent_endpoint(request: QueryAgentRequest) -> QueryAgentResponse
         intent=intent,
         confidence=confidence,
         routing_reason=routing_reason,
-        suggested_strategy=suggested_strategy,
+        suggested_strategy=telemetry.get("strategy_used"),
         answer=state.get("final_answer") or "",
         generated_code=gen_code,
         tabular_result=tabular_res,

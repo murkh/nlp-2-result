@@ -143,7 +143,6 @@ STRUCTURED_KEYWORDS = [
     "sql",
     "dataframe",
     "pandas",
-    "duckdb",
     "database",
     "find orders",
     "list orders",

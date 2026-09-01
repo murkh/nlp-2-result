@@ -27,7 +27,6 @@ def schema_retriever_node(state: AgentState) -> Dict[str, Any]:
     )
 
     update: Dict[str, Any] = {
-        "suggested_strategy": state.get("suggested_strategy") or "duckdb",
         "pruned_tables": SchemaContextRef.from_pruned(context).model_dump(),
         "schema_ddl": context.ddl_prompt_snippet,
         "loop_iterations": 0,

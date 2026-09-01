@@ -3,7 +3,7 @@ Tier 3 Cross-Feature Combinations E2E Tests (16 Interaction Scenarios)
 Multi-Agent Knowledge Base Q&A Platform
 
 Verifies multi-module interactions, end-to-end data flows, router state transitions,
-multi-engine benchmarking, Ragas evaluation integration, and lifecycle management.
+Ragas evaluation integration, and lifecycle management.
 """
 
 import hashlib
@@ -20,10 +20,10 @@ import pytest
 class TestTier3CrossFeatureCombinations:
     """16 Cross-Feature interaction and pipeline integration test cases."""
 
-    def test_comb_csv_upload_to_pruner_to_dedicated_db_to_synthesizer(
+    def test_comb_csv_upload_to_pruner_to_pandas_sandbox_to_synthesizer(
         self, sample_data_dir, blob_storage_dir, test_db, mock_embeddings
     ):
-        """Flow 1: CSV Upload -> Blob + Table Metadata -> Schema Pruner -> Strategy A -> Synthesizer."""
+        """Flow 1: CSV Upload -> Blob + Table Metadata -> Schema Pruner -> Sandbox -> Synthesizer."""
         csv_file = sample_data_dir["csv"]
         content = csv_file.read_bytes()
         dataset_id = str(uuid.uuid4())
@@ -76,38 +76,25 @@ class TestTier3CrossFeatureCombinations:
         )
         assert len(tables) == 1
 
-        # 4. Strategy A Execution (PostgreSQL Text2SQL)
-        res_df = df.groupby("region")["amount"].sum().reset_index().head(20)
+        # 4. Pandas Sandbox Execution over the stored blob
+        res_df = pd.read_csv(blob_path).groupby("region")["amount"].sum().reset_index().head(20)
+        assert not res_df.empty
 
-    def test_comb_multi_dataset_ingestion_and_benchmark_arena_comparison(self, sample_data_dir):
-        """Flow 5: Multi-Dataset Ingestion -> Benchmark Arena (A vs B vs C parallel comparison)."""
-        import duckdb
-
+    def test_comb_multi_dataset_ingestion_to_sandbox_execution(self, sample_data_dir):
+        """Flow 5: Multi-Dataset Ingestion -> generated code executed in the sandbox scope."""
         csv_path = str(sample_data_dir["csv"])
-
-        # Strategy A (Postgres simulated on DF)
         df = pd.read_csv(csv_path)
-        res_a = df.groupby("region")["amount"].sum().reset_index().sort_values("region")
 
-        # Strategy B (DuckDB)
-        con = duckdb.connect(":memory:")
-        res_b = con.execute(
-            f"SELECT region, SUM(amount) as amount FROM read_csv_auto('{csv_path}') GROUP BY region ORDER BY region"
-        ).df()
-        con.close()
+        expected = df.groupby("region")["amount"].sum().reset_index().sort_values("region")
 
-        # Strategy C (Pandas Sandbox)
         scope = {"df": df, "pd": pd}
         exec(
             "result = df.groupby('region')['amount'].sum().reset_index().sort_values('region')",
             {},
             scope,
         )
-        res_c = scope["result"]
 
-        # Assert Equivalence
-        pd.testing.assert_frame_equal(res_a, res_b)
-        pd.testing.assert_frame_equal(res_a, res_c)
+        pd.testing.assert_frame_equal(expected, scope["result"])
 
     def test_comb_router_greeting_to_chitchat_with_telemetry_trace(self, test_db):
         """Flow 6: LangGraph Router Greeting -> Chitchat node -> Telemetry logging."""
@@ -155,20 +142,25 @@ class TestTier3CrossFeatureCombinations:
         fused_score = (1.0 / (60 + dense_rank)) + (1.0 / (60 + sparse_rank))
         assert fused_score > 0.03
 
-    def test_comb_benchmark_arena_with_structured_equivalence_evaluation(self, sample_data_dir):
-        """Flow 10: Benchmark Arena -> DataFrame Equivalence evaluation."""
-        import duckdb
-
+    def test_comb_sandbox_output_with_structured_equivalence_evaluation(self, sample_data_dir):
+        """Flow 10: Sandbox output -> DataFrame Equivalence evaluation against a golden frame."""
         csv_path = str(sample_data_dir["csv"])
         df = pd.read_csv(csv_path)
 
-        # Golden SQL
-        con = duckdb.connect(":memory:")
-        golden_df = con.execute(
-            f"SELECT region, COUNT(*) as cnt FROM read_csv_auto('{csv_path}') GROUP BY region ORDER BY region"
-        ).df()
-        gen_df = df.groupby("region").size().reset_index(name="cnt").sort_values("region")
-        con.close()
+        golden_df = (
+            df.value_counts("region")
+            .rename("cnt")
+            .reset_index()
+            .sort_values("region")
+            .reset_index(drop=True)
+        )
+        gen_df = (
+            df.groupby("region")
+            .size()
+            .reset_index(name="cnt")
+            .sort_values("region")
+            .reset_index(drop=True)
+        )
 
         pd.testing.assert_frame_equal(golden_df, gen_df)
 
@@ -225,8 +217,8 @@ class TestTier3CrossFeatureCombinations:
 
     def test_comb_concurrent_queries_across_different_engines_with_tracing(self, test_db):
         """Flow 15: Concurrency and session isolation across multiple engines."""
-        sessions = ["sess_a", "sess_b", "sess_c", "sess_d"]
-        engines = ["dedicated_db", "duckdb", "pandas_sandbox", "unstructured_rag"]
+        sessions = ["sess_a", "sess_b"]
+        engines = ["pandas_sandbox", "unstructured_rag"]
 
         for sess, eng in zip(sessions, engines):
             test_db.execute(
@@ -236,11 +228,11 @@ class TestTier3CrossFeatureCombinations:
             )
 
         logs = test_db.fetchall("SELECT * FROM query_logs")
-        assert len(logs) == 4
+        assert len(logs) == 2
         assert set(r["session_id"] for r in logs) == set(sessions)
 
-    def test_comb_end_to_end_ingest_query_benchmark_and_export_telemetry(self, test_db):
-        """Flow 16: Complete Lifecycle (Ingest -> Query -> Benchmark -> Observability Export)."""
+    def test_comb_end_to_end_ingest_query_and_export_telemetry(self, test_db):
+        """Flow 16: Complete Lifecycle (Ingest -> Query -> Observability Export)."""
         summary_stats = {
             "total_queries": 10,
             "success_rate": 1.0,

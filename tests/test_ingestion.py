@@ -22,6 +22,7 @@ from tests.conftest import (
     SAMPLE_CUSTOMERS_CSV_TEXT,
     SAMPLE_MARKDOWN_TEXT,
     create_test_fixtures,
+    read_blob_dataframe,
 )
 
 
@@ -98,7 +99,7 @@ class TestIngestion(unittest.TestCase):
         self.assertGreater(col_map["notes"].null_percentage, 0.0)
 
     def test_structured_csv_ingestion(self):
-        """Verify full CSV ingestion pipeline: blob save, table creation, COPY, and metadata."""
+        """Verify full CSV ingestion pipeline: blob save and metadata catalog."""
         dataset = self.structured_engine.ingest_file(
             file_input=SAMPLE_CSV_TEXT,
             filename="orders.csv",
@@ -128,11 +129,11 @@ class TestIngestion(unittest.TestCase):
         self.assertIn("customer_id", col_names)
         self.assertIn("total_amount", col_names)
 
-        # 4. Check dedicated SQL table
-        cols, rows = self.test_db.execute_sql_query(f'SELECT * FROM "{table_meta.table_name}"')
-        self.assertEqual(len(rows), 5)
-        self.assertIn("order_id", cols)
-        self.assertIn("total_amount", cols)
+        # 4. Check the stored blob -- the only copy of the rows
+        df = read_blob_dataframe(self.blob_manager, dataset)
+        self.assertEqual(len(df), 5)
+        self.assertIn("order_id", df.columns)
+        self.assertIn("total_amount", df.columns)
 
     def test_recursive_character_chunker(self):
         """Verify recursive character text chunker boundaries and overlap."""

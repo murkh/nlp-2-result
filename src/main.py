@@ -44,8 +44,8 @@ def create_app() -> Any:
         title="Multi-Agent Knowledge Base Q&A Platform",
         description=(
             "Production-grade, token-efficient Multi-Agent Knowledge Base Q&A API "
-            "supporting structured and unstructured data with three execution strategies "
-            "(PostgreSQL Dedicated DB, DuckDB In-Memory, Pandas Sandbox) and parallel benchmarking."
+            "supporting structured data through a sandboxed Python/Pandas engine and "
+            "unstructured documents through hybrid dense + sparse RAG."
         ),
         version="0.1.0",
         lifespan=lifespan,

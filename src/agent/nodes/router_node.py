@@ -5,7 +5,7 @@ Evaluates user query with token-efficient prompt and determines execution path.
 
 from typing import Any, Dict
 
-from src.agent.state import AgentState
+from src.agent.state import STRATEGY_LABEL, AgentState
 from src.database.connection import get_db_manager
 from src.observability.telemetry import get_tracer
 from src.routing import SemanticRouteIndex, SupervisorRouter
@@ -62,7 +62,9 @@ def supervisor_router_node(state: AgentState) -> Dict[str, Any]:
                 "trace_id": trace.trace_id,
                 "route": decision.intent,
                 "route_engine": decision.route_engine,
-                "strategy_used": decision.suggested_strategy,
+                "strategy_used": (
+                    STRATEGY_LABEL if decision.intent == "STRUCTURED_QUERY" else None
+                ),
                 "prompt_tokens": telemetry.get("prompt_tokens", 0) + prompt_tokens,
                 "completion_tokens": telemetry.get("completion_tokens", 0) + completion_tokens,
                 "total_tokens": telemetry.get("total_tokens", 0)
@@ -77,7 +79,6 @@ def supervisor_router_node(state: AgentState) -> Dict[str, Any]:
             "intent": decision.intent,
             "confidence": decision.confidence,
             "routing_reason": decision.reasoning,
-            "suggested_strategy": decision.suggested_strategy,
             "candidate_datasets": decision.relevant_datasets,
             "clarification_message": decision.clarification_question,
             "telemetry": telemetry,

@@ -35,7 +35,7 @@ def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
 class DatabaseManager:
     """
     Unified database manager providing metadata storage, vector similarity search,
-    hybrid document search, and dedicated dynamic table operations.
+    and hybrid document search.
     """
 
     def __init__(self, settings: Optional[Settings] = None, in_memory: bool = False):
@@ -916,53 +916,8 @@ class DatabaseManager:
                 return rrf_results[:top_k]
 
     # -------------------------------------------------------------------------
-    # Dedicated Dynamic Table Management (Strategy A)
+    # Raw Read Helper
     # -------------------------------------------------------------------------
-    def create_dedicated_table(
-        self, table_name: str, column_defs: List[Tuple[str, str]], pkey_col: Optional[str] = None
-    ):
-        """Create a dedicated dynamic table for structured ingestion."""
-        col_sqls = []
-        if not pkey_col:
-            col_sqls.append(
-                "_row_id INTEGER PRIMARY KEY AUTOINCREMENT"
-                if self.in_memory
-                else "_row_id BIGSERIAL PRIMARY KEY"
-            )
-
-        for col_name, col_type in column_defs:
-            is_pk = col_name == pkey_col
-            type_str = col_type
-            if is_pk:
-                type_str += " PRIMARY KEY"
-            col_sqls.append(f'"{col_name}" {type_str}')
-
-        sql = f'CREATE TABLE IF NOT EXISTS "{table_name}" (\n  ' + ",\n  ".join(col_sqls) + "\n);"
-
-        with self.get_connection() as conn:
-            if self._pg_pool:
-                with conn.cursor() as cur:
-                    cur.execute(sql)
-            else:
-                conn.execute(sql)
-                conn.commit()
-
-    def insert_table_rows(self, table_name: str, columns: List[str], rows: List[List[Any]]):
-        """Batch insert rows into a dedicated table."""
-        if not rows:
-            return
-        cols_str = ", ".join([f'"{c}"' for c in columns])
-        placeholders = ", ".join(["%s" if self._pg_pool else "?" for _ in columns])
-        sql = f'INSERT INTO "{table_name}" ({cols_str}) VALUES ({placeholders})'
-
-        with self.get_connection() as conn:
-            if self._pg_pool:
-                with conn.cursor() as cur:
-                    cur.executemany(sql, rows)
-            else:
-                conn.executemany(sql, rows)
-                conn.commit()
-
     def execute_sql_query(
         self, sql_query: str, params: Optional[Tuple[Any, ...]] = None
     ) -> Tuple[List[str], List[Tuple[Any, ...]]]:

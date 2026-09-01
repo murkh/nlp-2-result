@@ -13,8 +13,6 @@ from typing import Any, Dict, List, Literal, Optional
 
 CorrectionClass = Literal["syntax", "missing_column", "missing_table", "misc"]
 
-PROBE = "probe"
-PROBE_REJECTED = "probe_rejected"
 EXECUTION_ERROR = "execution_error"
 EMPTY_RESULT = "empty_result"
 CRITIQUE = "critique"
@@ -88,10 +86,6 @@ def _render_one(entry: Dict[str, Any]) -> str:
     kind = entry.get("kind")
     attempt = entry.get("attempt")
 
-    if kind == PROBE:
-        return f"{entry.get('label')} -> {entry.get('result')}"
-    if kind == PROBE_REJECTED:
-        return f"probe rejected: {entry.get('reason')}"
     if kind == EXECUTION_ERROR:
         correction = entry.get("correction_class", "misc")
         return (

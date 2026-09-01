@@ -67,13 +67,12 @@ class TestSupervisorRouter(unittest.TestCase):
     # -------------------------------------------------------------------------
 
     def test_pure_greetings_hit_semantic_fastpath(self):
-        """Greetings resolve locally at high confidence with no execution strategy."""
+        """Greetings resolve locally at high confidence with no execution route."""
         for query in ["hello", "hey there", "good morning", "thanks a lot", "goodbye"]:
             decision = self.router.classify_intent(query)
             self.assertEqual(decision.intent, "GREETING_OR_CHITCHAT", query)
             self.assertEqual(decision.route_engine, "semantic_fastpath", query)
             self.assertGreaterEqual(decision.confidence, self.settings.router_semantic_threshold)
-            self.assertIsNone(decision.suggested_strategy, query)
             self.assertIsNone(decision.clarification_question, query)
 
     def test_tenant_table_resolves_to_structured_query(self):
@@ -84,7 +83,6 @@ class TestSupervisorRouter(unittest.TestCase):
         self.assertEqual(decision.intent, "STRUCTURED_QUERY")
         self.assertEqual(decision.route_engine, "semantic_fastpath")
         self.assertIn("inventory_q3", decision.relevant_datasets)
-        self.assertEqual(decision.suggested_strategy, "duckdb")
 
     def test_tenant_doc_resolves_to_unstructured_query(self):
         """A query naming a registered tenant document routes to RAG."""
@@ -93,7 +91,6 @@ class TestSupervisorRouter(unittest.TestCase):
         )
         self.assertEqual(decision.intent, "UNSTRUCTURED_QUERY")
         self.assertIn("travel_reimbursement_handbook.md", decision.relevant_datasets)
-        self.assertIsNone(decision.suggested_strategy)
 
     def test_tenant_anchors_are_isolated(self):
         """One tenant's dataset names never leak into another tenant's scoring."""
@@ -138,7 +135,6 @@ class TestSupervisorRouter(unittest.TestCase):
             self.assertEqual(decision.intent, "AMBIGUOUS_QUERY", query)
             self.assertEqual(decision.route_engine, "heuristic_guardrail", query)
             self.assertTrue(decision.clarification_question, query)
-            self.assertIsNone(decision.suggested_strategy, query)
 
     def test_clarification_lists_tenant_datasets(self):
         """The clarification question names the tenant's own registered assets."""
@@ -174,7 +170,6 @@ class TestSupervisorRouter(unittest.TestCase):
                 intent="STRUCTURED_QUERY",
                 confidence=0.66,
                 reasoning="Aggregation over a table.",
-                suggested_strategy="duckdb",
                 clarification_question=None,
             )
         )
@@ -195,7 +190,6 @@ class TestSupervisorRouter(unittest.TestCase):
                 intent="STRUCTURED_QUERY",
                 confidence=0.8,
                 reasoning="Follow-up on the prior aggregation.",
-                suggested_strategy="duckdb",
                 clarification_question=None,
             )
         )
@@ -244,7 +238,6 @@ class TestSupervisorRouter(unittest.TestCase):
                 intent="AMBIGUOUS_QUERY",
                 confidence=0.4,
                 reasoning="Underspecified.",
-                suggested_strategy=None,
                 clarification_question=None,
             )
         )
@@ -256,18 +249,8 @@ class TestSupervisorRouter(unittest.TestCase):
         self.assertTrue(decision.clarification_question)
 
     # -------------------------------------------------------------------------
-    # Strategy inference, catalog caching, anchor synthesis
+    # Catalog caching, anchor synthesis
     # -------------------------------------------------------------------------
-
-    def test_strategy_inference(self):
-        """Engine hints in the query override the duckdb default."""
-        self.assertEqual(self.router._infer_strategy("count orders"), "duckdb")
-        self.assertEqual(
-            self.router._infer_strategy("use pandas to count orders"), "pandas_sandbox"
-        )
-        self.assertEqual(
-            self.router._infer_strategy("query the dedicated postgres table"), "dedicated_db"
-        )
 
     def test_classify_intent_does_not_query_the_catalog(self):
         """The catalog is read once per org_id, never inside classify_intent."""

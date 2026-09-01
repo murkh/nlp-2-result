@@ -1,21 +1,6 @@
-"""Helpers shared by the structured loop nodes and the projection critic."""
+"""Helpers shared by the structured loop nodes."""
 
-import re
-from typing import Any, Dict, Iterable, Optional
-
-_CODE_BLOCK_RE = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
-
-SQL_BLOCK_LANGS = ("sql", "duckdb", "postgresql", "psql", "postgres", "")
-PYTHON_BLOCK_LANGS = ("python", "py", "")
-
-
-def extract_code_block(raw_text: str, languages: Iterable[str]) -> Optional[str]:
-    """First fenced block whose language tag is in `languages`."""
-    allowed = {lang.lower() for lang in languages}
-    for lang, content in _CODE_BLOCK_RE.findall(raw_text or ""):
-        if lang.lower().strip() in allowed:
-            return content.strip()
-    return None
+from typing import Any, Dict, Optional
 
 
 def schema_summary(schema_context: Dict[str, Any]) -> str:

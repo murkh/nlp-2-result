@@ -1,5 +1,5 @@
 """
-Strategy C: Sandboxed Python DataFrame Execution Engine.
+Sandboxed Python DataFrame Execution Engine.
 Orchestrates prompt generation, AST security validation,
 isolated subprocess execution, and data-backed response synthesis.
 """
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 class PandasSandboxEngine:
     """
-    Strategy C: Sandboxed Python DataFrame Engine.
+    Sandboxed Python DataFrame Engine.
     """
 
     def __init__(
@@ -58,7 +58,7 @@ class PandasSandboxEngine:
         request: QueryPandasSandboxRequest,
     ) -> QueryPandasSandboxResponse:
         """
-        Execute Strategy C query workflow:
+        Execute the sandboxed Python query workflow:
         1. Prune schema to get relevant file paths and column metadata.
         2. Generate Python transformation code.
         3. Validate AST security before spawning subprocess.
@@ -104,7 +104,7 @@ class PandasSandboxEngine:
             self.db_manager.log_query(
                 QueryLog(
                     query_text=query_text,
-                    engine="strategy_c_pandas_sandbox",
+                    engine="pandas_sandbox",
                     status="ERROR",
                     latency_ms=total_lat,
                     error_message=str(exc),
@@ -231,7 +231,7 @@ class PandasSandboxEngine:
         self.db_manager.log_query(
             QueryLog(
                 query_text=query_text,
-                engine="strategy_c_pandas_sandbox",
+                engine="pandas_sandbox",
                 status="SUCCESS",
                 prompt_tokens=token_usage.prompt_tokens,
                 completion_tokens=token_usage.completion_tokens,
@@ -255,7 +255,7 @@ class PandasSandboxEngine:
         )
 
         thinking = ThinkingProcess(
-            summary=f"Strategy C generated vectorized Python transformation code, passed AST security validation, and executed in an isolated subprocess sandbox returning {len(rows)} row(s).",
+            summary=f"Generated vectorized Python transformation code, passed AST security validation, and executed in an isolated subprocess sandbox returning {len(rows)} row(s).",
             steps=[
                 DecisionStep(
                     step_number=1,
@@ -330,12 +330,13 @@ class PandasSandboxEngine:
         """
         Run already-generated code through the AST whitelist and the sandbox.
 
-        Mirrors execute_sql on the SQL engines: the guardrails run here, so this is
-        a complete execution path and not a shortcut past them.
+        The guardrails run here, so this is a complete execution path and not a
+        shortcut past them. Violations are joined into one string: callers treat
+        the third element as an error message, not a list.
         """
-        is_safe, err_msg = validate_python_code(code)
+        is_safe, violations = validate_python_code(code)
         if not is_safe:
-            return [], [], err_msg
+            return [], [], "; ".join(violations)
 
         success, result_data, stderr_msg, _exit_code = execute_sandboxed_code(
             code=code,

@@ -1,8 +1,8 @@
 """
 Structured self-correction loop tests.
 
-The deterministic suite covers the pure logic -- error classification, the probe
-allowlist, budget routing, reducer discipline and graph shape -- with no LLM and
+The deterministic suite covers the pure logic -- error classification, code
+validation, budget routing, reducer discipline and graph shape -- with no LLM and
 no network. The `@requires_llm` suite exercises the loop end to end against real
 fixture data.
 """
@@ -19,12 +19,6 @@ from src.agent.graph import (
     run_agent,
 )
 from src.agent.nodes.loop import generate as generate_nodes
-from src.agent.nodes.loop.explore import _parse_plan, has_probes, tool_executor_node
-from src.agent.nodes.loop.probes import (
-    DISTINCT_VALUE_LIMIT,
-    ProbeRejected,
-    build_probe_sql,
-)
 from src.agent.nodes.loop.reflect import (
     classify_outcome,
     escalation_node,
@@ -34,10 +28,8 @@ from src.agent.nodes.loop.schema import has_schema
 from src.agent.state import AgentState
 from src.config import Settings, get_settings
 from src.database.connection import get_db_manager
-from src.engines.duckdb_engine import FORBIDDEN_DUCKDB_PATTERNS
 from src.feedback import (
     EXECUTION_ERROR,
-    PROBE,
     classify_error,
     observation,
     observation_prompt_block,
@@ -56,7 +48,6 @@ def loop_state(**overrides) -> AgentState:
     state: AgentState = {
         "query": "how many completed orders",
         "session_id": "test-session",
-        "suggested_strategy": "duckdb",
         "pruned_tables": {
             "table_names": ["orders"],
             "retained_columns": RETAINED,
@@ -64,13 +55,12 @@ def loop_state(**overrides) -> AgentState:
             "file_paths": {"orders": "/tmp/orders.csv"},
         },
         "schema_ddl": "CREATE TABLE orders (...)",
-        "generated_code": "SELECT COUNT(*) FROM orders",
+        "generated_code": "result = {'count': len(df)}",
         "execution_result": [{"count": 3}],
         "execution_columns": ["count"],
         "execution_error": None,
         "observations": [],
         "loop_iterations": 1,
-        "probe_plan": [],
         "reflection_class": None,
         "telemetry": {},
     }
@@ -79,7 +69,7 @@ def loop_state(**overrides) -> AgentState:
 
 
 class TestErrorTaxonomy(unittest.TestCase):
-    """Real DuckDB and PostgreSQL error strings map onto correction classes."""
+    """Real engine error strings map onto correction classes."""
 
     def test_missing_column(self):
         for message in (
@@ -107,84 +97,6 @@ class TestErrorTaxonomy(unittest.TestCase):
     def test_unrecognized_and_empty_are_misc(self):
         self.assertEqual(classify_error("connection reset by peer"), "misc")
         self.assertEqual(classify_error(""), "misc")
-
-
-class TestProbeAllowlist(unittest.TestCase):
-    """The model names identifiers; this module writes the SQL."""
-
-    def test_inspect_values_builds_bounded_distinct_query(self):
-        sql, label = build_probe_sql("inspect_values", "orders", "status", RETAINED)
-        self.assertIn('SELECT DISTINCT "status"', sql)
-        self.assertIn('FROM "orders"', sql)
-        self.assertIn(f"LIMIT {DISTINCT_VALUE_LIMIT}", sql)
-        self.assertEqual(label, "orders.status")
-
-    def test_sample_rows_needs_no_column(self):
-        sql, label = build_probe_sql("sample_rows", "orders", None, RETAINED)
-        self.assertIn('SELECT * FROM "orders"', sql)
-        self.assertEqual(label, "orders")
-
-    def test_identifiers_resolve_case_insensitively_to_schema_spelling(self):
-        sql, _ = build_probe_sql("inspect_values", "ORDERS", "STATUS", RETAINED)
-        self.assertIn('"orders"', sql)
-        self.assertIn('"status"', sql)
-
-    def test_unknown_table_rejected(self):
-        with self.assertRaises(ProbeRejected):
-            build_probe_sql("inspect_values", "secrets", "status", RETAINED)
-
-    def test_unknown_column_rejected(self):
-        with self.assertRaises(ProbeRejected):
-            build_probe_sql("inspect_values", "orders", "password", RETAINED)
-
-    def test_unknown_tool_rejected(self):
-        with self.assertRaises(ProbeRejected):
-            build_probe_sql("drop_table", "orders", "status", RETAINED)
-
-    def test_injection_attempt_in_identifier_is_rejected_not_escaped(self):
-        with self.assertRaises(ProbeRejected):
-            build_probe_sql("sample_rows", 'orders"; DROP TABLE orders; --', None, RETAINED)
-
-
-class TestToolExecutorRejection(unittest.TestCase):
-    """A rejected probe must not reach an engine."""
-
-    def test_out_of_schema_probe_executes_no_sql(self):
-        executed = []
-
-        class RecordingAdapter:
-            supports_probes = True
-
-            def execute(self, sql, schema_context):
-                executed.append(sql)
-                return [], [], None
-
-        original = generate_nodes.get_adapter
-        from src.agent.nodes.loop import explore
-
-        explore.get_adapter = lambda strategy: RecordingAdapter()
-        try:
-            state = loop_state(
-                probe_plan=[{"tool": "inspect_values", "table": "secrets", "column": "x"}]
-            )
-            update = tool_executor_node(state)
-        finally:
-            explore.get_adapter = original
-
-        self.assertEqual(executed, [])
-        self.assertEqual(update["observations"][0]["kind"], "probe_rejected")
-
-    def test_probe_plan_is_capped_by_budget(self):
-        raw = '```json\n[{"tool":"sample_rows","table":"orders"}, {"tool":"sample_rows","table":"orders"}, {"tool":"sample_rows","table":"orders"}]\n```'
-        self.assertEqual(len(_parse_plan(raw, 2)), 2)
-
-    def test_unparseable_plan_returns_none(self):
-        self.assertIsNone(_parse_plan("no fenced block here", 4))
-        self.assertIsNone(_parse_plan("```json\nnot json\n```", 4))
-        self.assertIsNone(_parse_plan('```json\n{"tool": "sample_rows"}\n```', 4))
-
-    def test_empty_plan_parses_to_empty_list(self):
-        self.assertEqual(_parse_plan("```json\n[]\n```", 4), [])
 
 
 class TestOutcomeClassification(unittest.TestCase):
@@ -238,45 +150,44 @@ class TestEscalation(unittest.TestCase):
     def test_reports_failure_without_inventing_an_answer(self):
         observations = [
             observation(
-                EXECUTION_ERROR, attempt=1, error="Catalog Error: no table", correction_class="missing_table"
+                EXECUTION_ERROR,
+                attempt=1,
+                error="KeyError: 'statuz'",
+                correction_class="missing_column",
             ),
-            observation(PROBE, label="orders.status", result="completed, shipped"),
         ]
         update = escalation_node(loop_state(observations=observations, loop_iterations=2))
 
         self.assertIn("could not build a working query", update["final_answer"])
-        self.assertIn("Catalog Error: no table", update["final_answer"])
-        self.assertIn("completed, shipped", update["final_answer"])
+        self.assertIn("KeyError: 'statuz'", update["final_answer"])
         self.assertIs(update["telemetry"]["execution_success"], False)
         self.assertIs(update["telemetry"]["loop"]["escalated"], True)
         self.assertEqual(update["citations"], [])
 
 
 class TestValidatorNode(unittest.TestCase):
-    """Validation is a fast-fail; the engine remains the real boundary."""
+    """Validation is a fast-fail; the sandbox remains the real boundary."""
 
-    def test_every_forbidden_pattern_is_refused(self):
-        statements = [
-            "DROP TABLE orders",
-            "DELETE FROM orders",
-            "UPDATE orders SET status = 'x'",
-            "INSERT INTO orders VALUES (1)",
-            "ATTACH 'evil.db'",
-            "COPY orders TO '/tmp/out.csv'",
+    def test_every_forbidden_construct_is_refused(self):
+        snippets = [
+            "import os\nresult = {'n': 1}",
+            "from subprocess import run\nresult = {'n': 1}",
+            "result = {'n': eval('1+1')}",
+            "open('/etc/passwd').read()",
+            "result = {'n': ().__class__}",
+            "result = {'n': ",
         ]
-        for sql in statements:
-            update = generate_nodes.code_validator_node(loop_state(generated_code=sql))
-            self.assertIsNotNone(update["execution_error"], sql)
+        for code in snippets:
+            update = generate_nodes.code_validator_node(loop_state(generated_code=code))
+            self.assertIsNotNone(update["execution_error"], code)
+            self.assertIsInstance(update["execution_error"], str, code)
             self.assertEqual(update["observations"][0]["kind"], EXECUTION_ERROR)
 
-    def test_read_only_select_passes(self):
+    def test_whitelisted_dataframe_code_passes(self):
         update = generate_nodes.code_validator_node(
-            loop_state(generated_code="SELECT COUNT(*) FROM orders")
+            loop_state(generated_code="import pandas as pd\nresult = {'count': len(df)}")
         )
         self.assertIsNone(update["execution_error"])
-
-    def test_forbidden_pattern_list_is_covered(self):
-        self.assertTrue(FORBIDDEN_DUCKDB_PATTERNS)
 
     def test_invalid_code_skips_execution(self):
         self.assertEqual(generate_nodes.is_valid(loop_state(execution_error="bad")), "reflect")
@@ -286,8 +197,8 @@ class TestValidatorNode(unittest.TestCase):
 class TestObservationRendering(unittest.TestCase):
     def test_order_is_preserved(self):
         entries = [
-            observation(PROBE, label="a", result="1"),
-            observation(PROBE, label="b", result="2"),
+            observation(EXECUTION_ERROR, attempt=1, error="a", correction_class="misc"),
+            observation(EXECUTION_ERROR, attempt=2, error="b", correction_class="misc"),
         ]
         self.assertLess(
             render_observations(entries).index("a"),
@@ -311,19 +222,19 @@ class TestObservationRendering(unittest.TestCase):
 class TestStateDiscipline(unittest.TestCase):
     """Only sequential trunk nodes may write the counter."""
 
-    def test_only_explorer_planner_writes_loop_iterations(self):
-        from src.agent.nodes.loop import explore, reflect, schema
+    def test_only_code_generator_writes_loop_iterations(self):
+        from src.agent.nodes.loop import reflect, schema
 
         writers = []
-        for module in (explore, generate_nodes, reflect, schema):
+        for module in (generate_nodes, reflect, schema):
             source = Path(module.__file__).read_text()
             if '"loop_iterations":' in source:
                 writers.append(module.__name__)
 
         self.assertEqual(
             writers,
-            ["src.agent.nodes.loop.explore", "src.agent.nodes.loop.schema"],
-            "loop_iterations must only be written at loop entry and on reset",
+            ["src.agent.nodes.loop.generate", "src.agent.nodes.loop.schema"],
+            "loop_iterations must only be written at attempt entry and on reset",
         )
 
     def test_observations_uses_an_accumulating_reducer(self):
@@ -361,7 +272,7 @@ class TestGraphShape(unittest.TestCase):
         return any(n not in done and walk(n) for n in list(adjacency))
 
     def test_single_pass_graph_is_acyclic(self):
-        """Benchmark and evaluation runs need a fixed number of steps."""
+        """Evaluation runs need a fixed number of steps."""
         self.assertFalse(self._has_cycle(build_single_pass_graph()))
 
     def test_agentic_graph_has_the_correction_cycle(self):
@@ -369,46 +280,52 @@ class TestGraphShape(unittest.TestCase):
 
     def test_single_pass_graph_has_no_loop_only_nodes(self):
         nodes = set(build_single_pass_graph().get_graph().nodes)
-        self.assertNotIn("explorer_planner", nodes)
         self.assertNotIn("reflector", nodes)
         self.assertNotIn("escalation", nodes)
 
-    def test_retry_edge_returns_to_the_planner(self):
+    def test_no_graph_retains_the_removed_sql_nodes(self):
+        for compiled in (build_single_pass_graph(), build_multi_agent_graph()):
+            nodes = set(compiled.get_graph().nodes)
+            self.assertNotIn("explorer_planner", nodes)
+            self.assertNotIn("tool_executor", nodes)
+            self.assertNotIn("projection_critic", nodes)
+
+    def test_retry_edge_returns_to_the_generator(self):
         edges = self._edges(build_multi_agent_graph())
-        self.assertIn(("reflector", "explorer_planner"), edges)
+        self.assertIn(("reflector", "code_generator"), edges)
         self.assertIn(("reflector", "escalation"), edges)
-        self.assertIn(("reflector", "projection_critic"), edges)
-
-    def test_pandas_strategy_gets_no_probes(self):
-        from src.agent.nodes.loop.engine_adapter import get_adapter, probes_available
-
-        schema_context = {"retained_columns": RETAINED}
-        self.assertFalse(probes_available(get_adapter("pandas_sandbox"), schema_context))
-        self.assertTrue(probes_available(get_adapter("duckdb"), schema_context))
+        self.assertIn(("reflector", "synthesizer"), edges)
 
     def test_missing_schema_routes_out_of_the_loop(self):
         self.assertEqual(has_schema({"pruned_tables": {"table_names": []}}), "no_schema")
         self.assertEqual(has_schema({"pruned_tables": {"table_names": ["orders"]}}), "generate")
 
-    def test_empty_probe_plan_skips_the_tool_executor(self):
-        self.assertEqual(has_probes(loop_state(probe_plan=[])), "generate")
-        self.assertEqual(
-            has_probes(loop_state(probe_plan=[{"tool": "sample_rows", "table": "orders"}])),
-            "probe",
-        )
+    def test_generator_owns_the_attempt_counter(self):
+        """The retry target must advance the budget or the cycle cannot terminate."""
+        engine = generate_nodes.get_sandbox_engine
 
-    def test_unknown_strategy_is_a_hard_error(self):
-        from src.agent.nodes.loop.engine_adapter import get_adapter
+        class StubEngine:
+            def generate_code(self, *args, **kwargs):
+                return "result = {'n': 1}", "thought", (1, 1)
 
-        with self.assertRaises(ValueError):
-            get_adapter("sqlite_someday")
+            def apply_dataset_loader(self, code, **kwargs):
+                return code
+
+        generate_nodes.get_sandbox_engine = lambda: StubEngine()
+        try:
+            first = generate_nodes.code_generator_node(loop_state(loop_iterations=0))
+            second = generate_nodes.code_generator_node(loop_state(loop_iterations=1))
+        finally:
+            generate_nodes.get_sandbox_engine = engine
+
+        self.assertEqual(first["loop_iterations"], 1)
+        self.assertEqual(second["loop_iterations"], 2)
 
 
 class TestConfigDefaults(unittest.TestCase):
     def test_budget_and_reflection_defaults(self):
         settings = Settings()
         self.assertEqual(settings.structured_loop_max_iters, 2)
-        self.assertTrue(settings.schema_exploration_enabled)
         self.assertFalse(
             settings.reflection_enabled,
             "execution feedback carries the gains; introspection is opt-in",
@@ -431,7 +348,7 @@ class TestCorrectionGainMetric(unittest.TestCase):
         return {
             "test_id": test_id,
             "query": "how many",
-            "engine": "duckdb",
+            "engine": "pandas_sandbox",
             "df_generated": rows,
             "df_golden": self.golden,
             "iterations": iterations,
@@ -463,7 +380,7 @@ class TestCorrectionGainMetric(unittest.TestCase):
 
 @requires_llm
 class TestLoopEndToEnd(unittest.TestCase):
-    """Real LLM, real DuckDB, real fixture CSV. No stubs."""
+    """Real LLM, real sandbox, real fixture CSV. No stubs."""
 
     @classmethod
     def setUpClass(cls):
@@ -492,7 +409,7 @@ class TestLoopEndToEnd(unittest.TestCase):
         self.assertEqual(loop.get("outcome"), "ok")
         self.assertIsNone(state.get("execution_error"))
 
-    def test_case_mismatch_query_is_grounded_by_a_probe(self):
+    def test_case_mismatch_query_still_answers(self):
         state = run_agent("how many COMPLETED orders are there?", agentic=True)
         self.assertIsNone(state.get("execution_error"))
         self.assertTrue(state.get("execution_result"))

@@ -19,7 +19,7 @@ from src.ingestion.structured import (
 from src.ingestion.unstructured import RecursiveCharacterChunker, UnstructuredIngestionEngine
 from src.pruning.schema_pruner import TwoStageSchemaPruner, estimate_token_count
 from src.storage.blob_store import BlobStorageManager
-from tests.conftest import create_test_fixtures
+from tests.conftest import create_test_fixtures, read_blob_dataframe
 
 
 class TestAdversarialMilestone1(unittest.TestCase):
@@ -285,14 +285,16 @@ class TestAdversarialMilestone1(unittest.TestCase):
         self.assertEqual(len(tables), 1)
         t_meta = tables[0]
 
-        # Verify SQL execution on the dedicated table with escaped identifiers
-        cols, rows = self.test_db.execute_sql_query(f'SELECT * FROM "{t_meta.table_name}"')
-        self.assertEqual(len(rows), 2)
+        # The sanitized identifiers are what the catalog and the generated code use
+        cols = [c.column_name for c in self.test_db.get_columns_for_table(t_meta.id)]
         self.assertIn("select", cols)
         self.assertIn("from", cols)
         self.assertIn("order", cols)
         self.assertIn("column_with_spaces", cols)
         self.assertIn("col_123_starts_with_digit", cols)
+
+        # The blob still holds both rows verbatim
+        self.assertEqual(len(read_blob_dataframe(self.blob_manager, dataset)), 2)
 
     def test_duplicate_and_colliding_column_names(self):
         """Verify ingestion of CSV with duplicate column names generates unique identifiers without error."""
@@ -318,9 +320,7 @@ class TestAdversarialMilestone1(unittest.TestCase):
         self.assertIn("name_2", col_names)
         self.assertIn("name_3", col_names)
 
-        # SQL query execution must succeed
-        cols, rows = self.test_db.execute_sql_query(f'SELECT * FROM "{t_meta.table_name}"')
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(read_blob_dataframe(self.blob_manager, dataset)), 2)
 
     def test_malformed_ragged_rows_and_missing_values(self):
         """Verify parser normalizes ragged rows (shorter and longer than header) with padding and truncation."""
@@ -341,15 +341,19 @@ class TestAdversarialMilestone1(unittest.TestCase):
 
         self.assertEqual(dataset.row_count, 4)
         t_meta = self.test_db.list_tables()[0]
-        cols, rows = self.test_db.execute_sql_query(f'SELECT * FROM "{t_meta.table_name}"')
-        self.assertEqual(len(rows), 4)
 
-        # Verify second row had short columns padded with NULL / None
-        row_2 = rows[1]
-        self.assertEqual(row_2[1], 5)
-        self.assertEqual(row_2[2], 6)
-        self.assertIsNone(row_2[3])
-        self.assertIsNone(row_2[4])
+        # The long row was truncated to the header width, not widened
+        self.assertEqual(t_meta.column_count, 4)
+        self.assertEqual(t_meta.row_count, 4)
+
+        # The short row was padded with None, which shows up as profiled nulls
+        by_name = {c.column_name: c for c in self.test_db.get_columns_for_table(t_meta.id)}
+        self.assertEqual(set(by_name), {"col_a", "col_b", "col_c", "col_d"})
+        self.assertEqual(by_name["col_a"].null_percentage, 0.0)
+        self.assertGreater(by_name["col_c"].null_percentage, 0.0)
+        self.assertGreater(by_name["col_d"].null_percentage, 0.0)
+        self.assertIn(5, by_name["col_a"].sample_values)
+        self.assertIn(6, by_name["col_b"].sample_values)
 
     def test_all_null_and_mixed_type_columns(self):
         """Verify statistical profiling and type deduction for 100% null columns and mixed-type columns."""
@@ -417,11 +421,10 @@ class TestAdversarialMilestone1(unittest.TestCase):
         )
 
         self.assertEqual(dataset.row_count, 2)
-        t_meta = self.test_db.list_tables()[0]
-        cols, rows = self.test_db.execute_sql_query(f'SELECT * FROM "{t_meta.table_name}"')
-        self.assertEqual(len(rows), 2)
-        desc_idx = cols.index("description")
-        desc_1 = rows[0][desc_idx]
+
+        df = read_blob_dataframe(self.blob_manager, dataset)
+        self.assertEqual(len(df), 2)
+        desc_1 = df["description"].iloc[0]
         self.assertIn("First line of desc", desc_1)
         self.assertIn("Second line of desc", desc_1)
         self.assertIn("Third line of desc", desc_1)

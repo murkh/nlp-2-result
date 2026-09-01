@@ -3,7 +3,6 @@
 from src.routing.schemas import (
     IntentType,
     RouteEngineType,
-    StrategyType,
     SupervisorDecision,
     TenantCatalog,
 )
@@ -15,7 +14,6 @@ __all__ = [
     "IntentType",
     "RouteEngineType",
     "SemanticRouteIndex",
-    "StrategyType",
     "SupervisorDecision",
     "SupervisorRouter",
     "TenantCatalog",

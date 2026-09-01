@@ -37,6 +37,23 @@ def only_value(tabular_result):
     return next(iter(row.values()))
 
 
+def read_blob_dataframe(blob_manager, dataset):
+    """
+    Ingested rows as the Pandas sandbox actually sees them: read straight off the
+    stored blob. The blob is the only copy of the data, so this is the assertion
+    surface for ingestion content.
+    """
+    import pandas as pd
+
+    path = blob_manager.get_absolute_path(dataset.blob_path)
+    suffix = path.suffix.lower()
+    if suffix in (".parquet", ".pq"):
+        return pd.read_parquet(path)
+    if suffix in (".xlsx", ".xls"):
+        return pd.read_excel(path)
+    return pd.read_csv(path, sep="\t" if suffix == ".tsv" else ",")
+
+
 def create_test_fixtures():
     """Factory helper to construct test objects for unittest or standalone execution."""
     temp_dir = Path(tempfile.mkdtemp(prefix="test_blobs_"))

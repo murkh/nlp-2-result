@@ -1,22 +1,18 @@
 """
-Verifies that engines hard-fail visibly when no LLM is configured.
+Verifies that the structured engine hard-fails visibly when no LLM is configured.
 There is no deterministic fallback generator: a missing or broken LLM must
 surface as error= on the response and an ERROR row in query_logs.
 """
 
 import unittest
 
-from src.api.schemas import (
-    QueryDedicatedDBRequest,
-    QueryDuckDBRequest,
-    QueryPandasSandboxRequest,
-)
+from src.api.schemas import QueryPandasSandboxRequest
 from src.config import Settings
 from tests.conftest import SAMPLE_CSV_TEXT, create_test_fixtures
 
 
 class TestLLMUnavailableSurfacing(unittest.TestCase):
-    """All three structured engines fail loudly without an LLM client."""
+    """The structured engine fails loudly without an LLM client."""
 
     def setUp(self):
         fixtures = create_test_fixtures()
@@ -52,30 +48,6 @@ class TestLLMUnavailableSurfacing(unittest.TestCase):
         self.assertEqual(len(logged), 1)
         self.assertIn("LLM", logged[0]["error_message"])
 
-    def test_dedicated_db_reports_missing_llm(self):
-        from src.engines.dedicated_db import DedicatedDBEngine
-
-        engine = DedicatedDBEngine(
-            db_manager=self.db_manager,
-            schema_pruner=self.schema_pruner,
-            settings=self.no_llm_settings,
-        )
-        resp = engine.execute_query(QueryDedicatedDBRequest(query="How many orders are completed?"))
-        self._assert_failed_visibly(resp, "strategy_a_dedicated_db")
-        self.assertEqual(resp.sql_query, "")
-
-    def test_duckdb_reports_missing_llm(self):
-        from src.engines.duckdb_engine import DuckDBQueryEngine
-
-        engine = DuckDBQueryEngine(
-            db_manager=self.db_manager,
-            schema_pruner=self.schema_pruner,
-            settings=self.no_llm_settings,
-        )
-        resp = engine.execute_query(QueryDuckDBRequest(query="How many orders are completed?"))
-        self._assert_failed_visibly(resp, "strategy_b_duckdb")
-        self.assertEqual(resp.sql_query, "")
-
     def test_pandas_sandbox_reports_missing_llm(self):
         from src.engines.pandas_sandbox.engine import PandasSandboxEngine
 
@@ -87,7 +59,7 @@ class TestLLMUnavailableSurfacing(unittest.TestCase):
         resp = engine.execute_query(
             QueryPandasSandboxRequest(query="How many orders are completed?")
         )
-        self._assert_failed_visibly(resp, "strategy_c_pandas_sandbox")
+        self._assert_failed_visibly(resp, "pandas_sandbox")
         self.assertEqual(resp.python_code, "")
 
 

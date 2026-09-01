@@ -3,7 +3,6 @@ Adversarial Stress Test Suite for Milestone 2 (Challenger 1).
 Exhaustively stress-tests:
 1. AST Security Validator: Whitelists, forbidden calls, dunder escapes, and AST bypass vulnerabilities.
 2. Subprocess Watchdog & Sandbox Isolation: CPU spin timeouts, environment sanitation, error isolation.
-3. Benchmark Arena Equivalence: Float/Int tolerances, NaN/Inf, string normalization, schema variances, concurrent thread safety.
 """
 
 import math
@@ -12,23 +11,13 @@ import tempfile
 import time
 import unittest
 
-from src.api.schemas import (
-    QueryBenchmarkRequest,
-    QueryPandasSandboxRequest,
-    TabularResult,
-)
-from src.engines.benchmark_arena import (
-    BenchmarkArenaEngine,
-    are_values_equivalent,
-    compare_tabular_results,
-)
+from src.api.schemas import QueryPandasSandboxRequest
 from src.engines.pandas_sandbox.ast_validator import (
     ASTSecurityValidator,
     validate_python_code,
 )
 from src.engines.pandas_sandbox.engine import PandasSandboxEngine
 from src.engines.pandas_sandbox.runner import execute_sandboxed_code
-from tests.conftest import create_test_fixtures, only_value, requires_llm
 
 
 class TestASTSecurityAdversarial(unittest.TestCase):
@@ -288,147 +277,6 @@ class TestSubprocessWatchdogAdversarial(unittest.TestCase):
         self.assertFalse(
             res["data"]["has_secret"], "Security violation: Sensitive env var leaked into sandbox!"
         )
-
-
-class TestBenchmarkArenaAdversarial(unittest.TestCase):
-    """Adversarial stress testing of Benchmark Arena equivalence and parallel execution."""
-
-    def setUp(self):
-        fixtures = create_test_fixtures()
-        self.temp_dir = fixtures["temp_dir"]
-        self.db_manager = fixtures["test_db"]
-        self.blob_manager = fixtures["blob_manager"]
-        self.structured_engine = fixtures["structured_engine"]
-        self.schema_pruner = fixtures["schema_pruner"]
-
-        sample_csv = (
-            "order_id,customer_id,order_date,status,total_amount,shipping_city\n"
-            "101,501,2024-01-10 10:00:00,completed,150.50,New York\n"
-            "102,502,2024-01-11 11:30:00,completed,280.00,San Francisco\n"
-            "103,501,2024-01-12 14:15:00,shipped,75.25,New York\n"
-            "104,503,2024-01-13 09:45:00,cancelled,45.00,Chicago\n"
-            "105,504,2024-01-14 16:20:00,completed,510.80,Austin\n"
-        )
-        self.dataset_rec = self.structured_engine.ingest_file(
-            file_input=sample_csv,
-            filename="orders.csv",
-            display_name="Orders",
-            description="E-commerce orders dataset for 3-way benchmarking.",
-        )
-        self.arena = BenchmarkArenaEngine(
-            db_manager=self.db_manager,
-            blob_manager=self.blob_manager,
-            schema_pruner=self.schema_pruner,
-        )
-
-    def tearDown(self):
-        import shutil
-
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    # -------------------------------------------------------------------------
-    # 1. are_values_equivalent Edge Cases
-    # -------------------------------------------------------------------------
-    def test_value_equivalence_float_and_int_tolerances(self):
-        """Verify numeric equivalence handles float/int mix, epsilon tolerance, and signed zeros."""
-        self.assertTrue(are_values_equivalent(100, 100.0))
-        self.assertTrue(are_values_equivalent(0, -0.0))
-        self.assertTrue(are_values_equivalent(10.00001, 10.00002, tolerance=1e-4))
-        self.assertFalse(are_values_equivalent(10.0, 11.0, tolerance=1e-4))
-
-    def test_value_equivalence_string_case_and_whitespace(self):
-        """Verify string equivalence normalizes whitespace and casing."""
-        self.assertTrue(are_values_equivalent("COMPLETED", "completed"))
-        self.assertTrue(are_values_equivalent(" New York ", "new york"))
-        self.assertFalse(are_values_equivalent("New York", "San Francisco"))
-
-    def test_value_equivalence_none_and_null(self):
-        """Verify None handling in values equivalence."""
-        self.assertTrue(are_values_equivalent(None, None))
-        self.assertFalse(are_values_equivalent(None, 0))
-        self.assertFalse(are_values_equivalent(None, ""))
-
-    def test_value_equivalence_inf_and_nan(self):
-        """Verify infinity and NaN behavior in are_values_equivalent."""
-        self.assertTrue(are_values_equivalent(float("inf"), float("inf")))
-        self.assertTrue(are_values_equivalent(float("-inf"), float("-inf")))
-        self.assertFalse(are_values_equivalent(float("inf"), float("-inf")))
-        self.assertFalse(are_values_equivalent(float("nan"), float("nan")))
-
-    # -------------------------------------------------------------------------
-    # 2. compare_tabular_results Edge Cases
-    # -------------------------------------------------------------------------
-    def test_tabular_equivalence_scalar_column_alias_invariance(self):
-        """Verify single-value scalar results match even if column alias differs."""
-        res_a = TabularResult(columns=["total_records"], rows=[{"total_records": 5}], row_count=1)
-        res_b = TabularResult(columns=["count"], rows=[{"count": 5.0}], row_count=1)
-        self.assertTrue(compare_tabular_results(res_a, res_b))
-
-    def test_tabular_equivalence_column_order_invariance(self):
-        """Verify records with different key ordering in dict are equivalent."""
-        res_a = TabularResult(
-            columns=["city", "revenue"],
-            rows=[{"city": "NYC", "revenue": 100.0}, {"city": "SFO", "revenue": 200.0}],
-            row_count=2,
-        )
-        res_b = TabularResult(
-            columns=["revenue", "city"],
-            rows=[{"revenue": 100.0, "city": "nyc"}, {"revenue": 200.0, "city": "sfo"}],
-            row_count=2,
-        )
-        self.assertTrue(compare_tabular_results(res_a, res_b))
-
-    def test_tabular_equivalence_row_count_mismatch(self):
-        """Verify row count mismatch immediately fails equivalence."""
-        res_a = TabularResult(columns=["status"], rows=[{"status": "completed"}], row_count=1)
-        res_b = TabularResult(
-            columns=["status"], rows=[{"status": "completed"}, {"status": "pending"}], row_count=2
-        )
-        self.assertFalse(compare_tabular_results(res_a, res_b))
-
-    def test_tabular_equivalence_empty_tables(self):
-        """Verify two empty results (0 rows) evaluate as equivalent."""
-        res_a = TabularResult(columns=["a", "b"], rows=[], row_count=0)
-        res_b = TabularResult(columns=["x", "y"], rows=[], row_count=0)
-        self.assertTrue(compare_tabular_results(res_a, res_b))
-
-    def test_tabular_equivalence_schema_column_subset_anomaly(self):
-        """
-        EMPIRICAL OBSERVATION: Tests partial key intersection behavior in compare_tabular_results.
-        """
-        res_3cols = TabularResult(
-            columns=["city", "revenue", "extra_metric"],
-            rows=[{"city": "NYC", "revenue": 100.0, "extra_metric": 99.9}],
-            row_count=1,
-        )
-        res_2cols = TabularResult(
-            columns=["city", "revenue"],
-            rows=[{"city": "NYC", "revenue": 100.0}],
-            row_count=1,
-        )
-        self.assertTrue(compare_tabular_results(res_3cols, res_2cols))
-
-    # -------------------------------------------------------------------------
-    # 3. Concurrent Multi-Threaded Arena Execution
-    # -------------------------------------------------------------------------
-    @requires_llm
-    def test_arena_concurrent_execution_thread_safety(self):
-        """Verify concurrent execution of Strategy A, B, and C in parallel ThreadPool."""
-        req = QueryBenchmarkRequest(query="What is the total sales revenue?")
-        resp = self.arena.execute_benchmark(req)
-
-        self.assertEqual(resp.strategy_a.status, "SUCCESS")
-        self.assertEqual(resp.strategy_b.status, "SUCCESS")
-        self.assertEqual(resp.strategy_c.status, "SUCCESS")
-        self.assertTrue(resp.benchmark_summary.consensus_reached)
-
-        # Each strategy lets the LLM name its own output column; compare values.
-        val_a = float(only_value(resp.strategy_a.tabular_result))
-        val_b = float(only_value(resp.strategy_b.tabular_result))
-        val_c = float(only_value(resp.strategy_c.tabular_result))
-        self.assertAlmostEqual(val_a, 1061.55, places=2)
-        self.assertAlmostEqual(val_b, 1061.55, places=2)
-        self.assertAlmostEqual(val_c, 1061.55, places=2)
 
 
 if __name__ == "__main__":

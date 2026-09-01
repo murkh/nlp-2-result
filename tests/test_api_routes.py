@@ -1,11 +1,9 @@
 """
 Unit and Integration Tests for FastAPI API Routes.
-Tests /health, /ingest, /datasets, and all 5 execution query endpoints:
-- POST /query/dedicated-db
-- POST /query/duckdb
+Tests /health, /ingest, /datasets, and the execution query endpoints:
 - POST /query/pandas-sandbox
 - POST /query/unstructured-rag
-- POST /query/benchmark
+- POST /query/agent
 """
 
 import asyncio
@@ -16,9 +14,6 @@ from pathlib import Path
 from src.api.routes import agent, ingest, query
 from src.api.schemas import (
     QueryAgentRequest,
-    QueryBenchmarkRequest,
-    QueryDedicatedDBRequest,
-    QueryDuckDBRequest,
     QueryPandasSandboxRequest,
     QueryUnstructuredRAGRequest,
 )
@@ -101,26 +96,6 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertEqual(resp.category, "structured")
 
     @requires_llm
-    def test_query_dedicated_db_endpoint(self):
-        """Verify POST /query/dedicated-db."""
-        req = QueryDedicatedDBRequest(query="How many total orders are there?")
-        resp = asyncio.run(query.query_dedicated_db_endpoint(req))
-        self.assertIsNone(resp.error)
-        self.assertEqual(resp.tabular_result.row_count, 1)
-        self.assertIsNotNone(resp.thinking_process)
-        self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
-
-    @requires_llm
-    def test_query_duckdb_endpoint(self):
-        """Verify POST /query/duckdb."""
-        req = QueryDuckDBRequest(query="How many total orders are there?")
-        resp = asyncio.run(query.query_duckdb_endpoint(req))
-        self.assertIsNone(resp.error)
-        self.assertEqual(resp.tabular_result.row_count, 1)
-        self.assertIsNotNone(resp.thinking_process)
-        self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
-
-    @requires_llm
     def test_query_pandas_sandbox_endpoint(self):
         """Verify POST /query/pandas-sandbox."""
         req = QueryPandasSandboxRequest(query="How many total orders are there?")
@@ -141,19 +116,6 @@ class TestAPIRoutes(unittest.TestCase):
         self.assertIn("1000 requests", resp.answer)
         self.assertIsNotNone(resp.thinking_process)
         self.assertGreaterEqual(len(resp.thinking_process.steps), 3)
-
-    @requires_llm
-    def test_query_benchmark_endpoint(self):
-        """Verify POST /query/benchmark."""
-        req = QueryBenchmarkRequest(query="How many total orders are there?")
-        resp = asyncio.run(query.query_benchmark_endpoint(req))
-        self.assertEqual(resp.strategy_a.status, "SUCCESS")
-        self.assertEqual(resp.strategy_b.status, "SUCCESS")
-        self.assertEqual(resp.strategy_c.status, "SUCCESS")
-        self.assertTrue(resp.benchmark_summary.consensus_reached)
-        self.assertIsNotNone(resp.strategy_a.thinking_process)
-        self.assertIsNotNone(resp.strategy_b.thinking_process)
-        self.assertIsNotNone(resp.strategy_c.thinking_process)
 
     @requires_llm
     def test_query_agent_endpoint(self):

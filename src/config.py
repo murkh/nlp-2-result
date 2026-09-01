@@ -69,25 +69,22 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
-    # Projection Critic
-    # Widening a SELECT list against a given DDL is a small task, so it can run on a
-    # cheaper/faster model than the main generator. None falls back to openai_model,
-    # which keeps the feature safe behind an OpenAI-compatible gateway (bedrock-mantle)
-    # that only serves a specific set of model ids.
+    # Reflection Critic
+    # Judging whether a result answers the question is a small task, so it can run
+    # on a cheaper/faster model than the main generator. None falls back to
+    # openai_model, which keeps the feature safe behind an OpenAI-compatible
+    # gateway (bedrock-mantle) that only serves a specific set of model ids.
     critic_model: Optional[str] = Field(default=None, alias="CRITIC_MODEL")
-    projection_critic_enabled: bool = Field(default=True, alias="PROJECTION_CRITIC_ENABLED")
 
     # Structured Self-Correction Loop
-    # The retry budget is safe only because every execution path is read-only
-    # (FORBIDDEN_SQL_PATTERNS, FORBIDDEN_DUCKDB_PATTERNS, the AST whitelist).
-    # If that surface ever permits mutation, remove the loop or make it idempotent.
+    # The retry budget is safe only because the execution path is read-only (the
+    # sandbox AST whitelist). If that surface ever permits mutation, remove the
+    # loop or make it idempotent.
     #
     # max_iters is 2 because the first correction pass carries almost all of the
     # measured gain and later passes mostly add tokens.
     structured_loop_enabled: bool = Field(default=True, alias="STRUCTURED_LOOP_ENABLED")
     structured_loop_max_iters: int = Field(default=2, alias="STRUCTURED_LOOP_MAX_ITERS")
-    schema_exploration_enabled: bool = Field(default=True, alias="SCHEMA_EXPLORATION_ENABLED")
-    loop_tool_call_budget: int = Field(default=4, alias="LOOP_TOOL_CALL_BUDGET")
     # Execution feedback carries the gains; model introspection is opt-in.
     reflection_enabled: bool = Field(default=False, alias="REFLECTION_ENABLED")
 

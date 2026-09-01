@@ -102,7 +102,7 @@ class TestObservability(unittest.TestCase):
             span1.end()
 
             # Span 2: Engine
-            span2 = trace.start_span("duckdb_engine")
+            span2 = trace.start_span("pandas_sandbox_engine")
             span2.record_tokens(prompt_tokens=150, completion_tokens=45)
             span2.end()
 

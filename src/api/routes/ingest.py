@@ -62,7 +62,7 @@ async def ingest_file_endpoint(
             category=ds.category,
             row_count=ds.row_count,
             page_count=None,
-            message=f"Structured dataset '{ds.name}' successfully ingested into dedicated table and vector catalog.",
+            message=f"Structured dataset '{ds.name}' successfully ingested into blob storage and the vector catalog.",
         )
     elif ext in unstructured_exts:
         unstruct_engine = UnstructuredIngestionEngine(db_manager=db_manager)

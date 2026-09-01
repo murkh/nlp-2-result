@@ -37,7 +37,7 @@ DEFAULT_STRUCTURED_TEST_CASES = [
     {
         "test_id": "struct_01_total_revenue",
         "query": "What is the total revenue from all completed orders?",
-        "engine": "dedicated_db",
+        "engine": "pandas_sandbox",
         "df_golden": pd.DataFrame({"total_revenue": [941.30]}),
         "df_generated": pd.DataFrame({"total_revenue": [941.30]}),
         "latency_ms": 28.5,
@@ -46,9 +46,9 @@ DEFAULT_STRUCTURED_TEST_CASES = [
         "error": None,
     },
     {
-        "test_id": "struct_02_duckdb_region_count",
+        "test_id": "struct_02_region_count",
         "query": "Count the number of orders by shipping city in alphabetical order",
-        "engine": "duckdb",
+        "engine": "pandas_sandbox",
         "df_golden": pd.DataFrame(
             {
                 "shipping_city": ["Austin", "Chicago", "New York", "San Francisco"],
@@ -80,7 +80,7 @@ DEFAULT_STRUCTURED_TEST_CASES = [
     {
         "test_id": "struct_04_floating_point_epsilon",
         "query": "Calculate total tax amount with 8.875% tax rate",
-        "engine": "duckdb",
+        "engine": "pandas_sandbox",
         "df_golden": pd.DataFrame({"total_tax": [83.5404]}),
         "df_generated": pd.DataFrame({"total_tax": [83.54038]}),
         "latency_ms": 16.8,
@@ -91,7 +91,7 @@ DEFAULT_STRUCTURED_TEST_CASES = [
     {
         "test_id": "struct_05_column_permuted_order",
         "query": "List customer id, order status, and total amount for order 101",
-        "engine": "dedicated_db",
+        "engine": "pandas_sandbox",
         "df_golden": pd.DataFrame(
             {"customer_id": [501], "status": ["completed"], "total_amount": [150.50]}
         ),

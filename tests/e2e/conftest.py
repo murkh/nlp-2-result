@@ -259,7 +259,7 @@ def sample_data_dir(tmp_path):
         "Parses structured CSV/Parquet and unstructured PDF/TXT into blob store.\n\n"
         "## Execution Engines\n"
         "Strategy A: PostgreSQL Text2SQL.\n"
-        "Strategy B: DuckDB in-memory SQL over Parquet.\n"
+        "The Pandas sandbox reads Parquet and CSV blobs directly.\n"
         "Strategy C: Sandboxed Python DataFrame execution.\n"
     )
     md_path.write_text(md_content, encoding="utf-8")

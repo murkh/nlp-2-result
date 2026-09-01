@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Tuple
 from src.agent.nodes.loop._shared import add_tokens, schema_summary
 from src.agent.state import AgentState
 from src.config import Settings, get_settings
-from src.feedback import CRITIQUE, EMPTY_RESULT, EXECUTION_ERROR, PROBE, observation
+from src.feedback import CRITIQUE, EMPTY_RESULT, EXECUTION_ERROR, observation
 from src.llm import require_openai_client
 
 logger = logging.getLogger(__name__)
@@ -135,14 +135,6 @@ def route_after_reflect(state: AgentState) -> str:
     return "escalate" if state.get("execution_error") else "continue"
 
 
-def _observed_values(observations: List[Dict[str, Any]]) -> List[str]:
-    return [
-        f"- {entry.get('label')}: {entry.get('result')}"
-        for entry in observations
-        if entry.get("kind") == PROBE
-    ]
-
-
 def _attempt_errors(observations: List[Dict[str, Any]]) -> List[str]:
     return [
         f"- attempt {entry.get('attempt')} ({entry.get('correction_class')}): {entry.get('error')}"
@@ -169,10 +161,6 @@ def escalation_node(state: AgentState) -> Dict[str, Any]:
     errors = _attempt_errors(observations)
     if errors:
         sections.append("**What failed:**\n" + "\n".join(errors))
-
-    values = _observed_values(observations)
-    if values:
-        sections.append("**What the data contains:**\n" + "\n".join(values))
 
     sections.append(
         "Could you rephrase the question, or name the table and column you want?"

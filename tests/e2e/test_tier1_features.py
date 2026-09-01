@@ -527,7 +527,7 @@ class TestFeature4TwoStageSchemaPruner:
         assert "order_id INTEGER PRIMARY KEY" in ddl
         assert "amount FLOAT" in ddl
 
-    def test_f04_file_paths_mapping_for_duckdb_and_pandas(self, sample_data_dir):
+    def test_f04_file_paths_mapping_for_the_pandas_sandbox(self, sample_data_dir):
         mapping = {
             "tbl_sales": str(sample_data_dir["csv"]),
             "tbl_customers": str(sample_data_dir["parquet"]),
@@ -537,136 +537,10 @@ class TestFeature4TwoStageSchemaPruner:
 
 
 # =============================================================================
-# FEATURE 5: Strategy A - PostgreSQL Dedicated DB Query Engine
+# FEATURE 7: Sandboxed Python DataFrame Execution
 # =============================================================================
-class TestFeature5StrategyAPostgreSQL:
-    """Verifies Strategy A (Dedicated DB Text2SQL generation, read-only mode, LIMIT 20)."""
-
-    def test_f05_dedicated_db_sql_generation_and_execution(self, sample_data_dir):
-        # Test executing query against in-memory dataframe (mimicking postgres engine)
-        df = sample_data_dir["sales_df"]
-        result = df.groupby("region")["amount"].sum().reset_index().head(20)
-        assert len(result) > 0
-        assert "region" in result.columns
-        assert "amount" in result.columns
-
-    def test_f05_dedicated_db_read_only_enforcement(self):
-        # Read-only guard rejects destructive SQL
-        disallowed_keywords = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE", "CREATE"]
-
-        def is_safe_read_only(sql_query: str) -> bool:
-            tokens = [t.strip().upper() for t in sql_query.split()]
-            return not any(kw in tokens for kw in disallowed_keywords)
-
-        safe_sql = "SELECT region, SUM(amount) FROM tbl_sales GROUP BY region LIMIT 20;"
-        dangerous_sql = "DROP TABLE tbl_sales;"
-
-        assert is_safe_read_only(safe_sql) is True
-        assert is_safe_read_only(dangerous_sql) is False
-
-    def test_f05_dedicated_db_limit_20_enforcement(self):
-        large_df = pd.DataFrame({"id": range(100), "val": range(100)})
-        result = large_df.head(20)
-        assert len(result) == 20
-        assert len(result) <= 20
-
-    def test_f05_dedicated_db_aggregate_group_by_query(self, sample_data_dir):
-        df = sample_data_dir["sales_df"]
-        agg = (
-            df.groupby("region")
-            .agg(total_amount=("amount", "sum"), total_orders=("order_id", "count"))
-            .reset_index()
-        )
-        assert len(agg) == 4
-        assert set(agg["region"]) == {"North", "South", "East", "West"}
-
-    def test_f05_dedicated_db_telemetry_payload_structure(self):
-        telemetry = {
-            "engine": "dedicated_db",
-            "prompt_tokens": 180,
-            "completion_tokens": 45,
-            "latency_ms": 32.5,
-            "row_count": 4,
-            "generated_code": "SELECT region, SUM(amount) FROM tbl_sales GROUP BY region LIMIT 20;",
-        }
-        assert telemetry["engine"] == "dedicated_db"
-        assert telemetry["prompt_tokens"] > 0
-        assert telemetry["latency_ms"] > 0
-
-
-# =============================================================================
-# FEATURE 6: Strategy B - DuckDB Blob Engine
-# =============================================================================
-class TestFeature6StrategyBDuckDB:
-    """Verifies Strategy B in-memory DuckDB queries over blob Parquet/CSV files."""
-
-    def test_f06_duckdb_query_parquet_blob_direct(self, sample_data_dir):
-        import duckdb
-
-        parquet_path = str(sample_data_dir["parquet"])
-        con = duckdb.connect(database=":memory:")
-        res = con.execute(
-            f"SELECT tier, COUNT(*) as count FROM read_parquet('{parquet_path}') GROUP BY tier ORDER BY count DESC"
-        ).df()
-        assert len(res) > 0
-        assert "tier" in res.columns
-        assert "count" in res.columns
-        con.close()
-
-    def test_f06_duckdb_query_csv_blob_direct(self, sample_data_dir):
-        import duckdb
-
-        csv_path = str(sample_data_dir["csv"])
-        con = duckdb.connect(database=":memory:")
-        res = con.execute(
-            f"SELECT region, SUM(amount) as total FROM read_csv_auto('{csv_path}') GROUP BY region LIMIT 20"
-        ).df()
-        assert len(res) == 4
-        con.close()
-
-    def test_f06_duckdb_temporary_view_isolation(self, sample_data_dir):
-        import duckdb
-
-        parquet_path = str(sample_data_dir["parquet"])
-        con = duckdb.connect(database=":memory:")
-        con.execute(
-            f"CREATE TEMPORARY VIEW view_customers AS SELECT * FROM read_parquet('{parquet_path}');"
-        )
-        res = con.execute("SELECT name, tier FROM view_customers WHERE active = true").df()
-        assert len(res) == 4
-        con.close()
-
-    def test_f06_duckdb_security_pragmas_enforced(self):
-        import duckdb
-
-        con = duckdb.connect(database=":memory:")
-        # Verify PRAGMAs and standard functions
-        con.execute("PRAGMA threads=2;")
-        res = con.execute("SELECT 1 AS secure_status").fetchone()
-        assert res[0] == 1
-        con.close()
-
-    def test_f06_duckdb_aggregation_and_window_functions(self, sample_data_dir):
-        import duckdb
-
-        csv_path = str(sample_data_dir["csv"])
-        con = duckdb.connect(database=":memory:")
-        sql = (
-            f"SELECT region, amount, "
-            f"RANK() OVER (PARTITION BY region ORDER BY amount DESC) as rnk "
-            f"FROM read_csv_auto('{csv_path}')"
-        )
-        res = con.execute(sql).df()
-        assert "rnk" in res.columns
-        assert res["rnk"].min() == 1
-        con.close()
-
-
-# =============================================================================
-# FEATURE 7: Strategy C - Sandboxed Python DataFrame Execution
-# =============================================================================
-class TestFeature7StrategyCPandasSandbox:
-    """Verifies Strategy C AST validation, subprocess execution, and isolation."""
+class TestFeature7PandasSandbox:
+    """Verifies AST validation, subprocess execution, and isolation."""
 
     def test_f07_pandas_sandbox_valid_transformation_execution(self, sample_data_dir):
         df = sample_data_dir["sales_df"]
@@ -778,60 +652,6 @@ class TestFeature8UnstructuredHybridRAG:
 
 
 # =============================================================================
-# FEATURE 9: Benchmark Arena (Parallel Execution Strategy A, B, C)
-# =============================================================================
-class TestFeature9BenchmarkArena:
-    """Verifies parallel execution of Strategy A, B, and C with telemetry & equivalence."""
-
-    def test_f09_benchmark_arena_concurrent_execution(self, sample_data_dir):
-        # Simulate results from A, B, C
-        res_a = {"engine": "Strategy A (Postgres)", "latency_ms": 42.1, "tokens": 210, "rows": 4}
-        res_b = {"engine": "Strategy B (DuckDB)", "latency_ms": 18.3, "tokens": 195, "rows": 4}
-        res_c = {"engine": "Strategy C (Pandas)", "latency_ms": 35.0, "tokens": 240, "rows": 4}
-
-        arena_results = [res_a, res_b, res_c]
-        assert len(arena_results) == 3
-        assert min(r["latency_ms"] for r in arena_results) == 18.3
-
-    def test_f09_benchmark_arena_telemetry_comparison(self):
-        telemetry = {
-            "query": "Total sales by region",
-            "engines": {
-                "dedicated_db": {"latency_ms": 40.0, "prompt_tokens": 150, "completion_tokens": 50},
-                "duckdb": {"latency_ms": 15.0, "prompt_tokens": 140, "completion_tokens": 45},
-                "pandas_sandbox": {
-                    "latency_ms": 30.0,
-                    "prompt_tokens": 160,
-                    "completion_tokens": 60,
-                },
-            },
-            "fastest_engine": "duckdb",
-            "lowest_token_cost": "duckdb",
-        }
-        assert telemetry["fastest_engine"] == "duckdb"
-        assert (
-            telemetry["engines"]["duckdb"]["latency_ms"]
-            < telemetry["engines"]["dedicated_db"]["latency_ms"]
-        )
-
-    def test_f09_benchmark_arena_token_count_tracking(self):
-        tokens_a = 150 + 50
-        tokens_b = 140 + 45
-        tokens_c = 160 + 60
-        assert tokens_b < tokens_a < tokens_c
-
-    def test_f09_benchmark_arena_latency_metrics(self):
-        latencies = [42.1, 18.3, 35.0]
-        avg_lat = sum(latencies) / len(latencies)
-        assert 15.0 < avg_lat < 50.0
-
-    def test_f09_benchmark_arena_result_equivalence_check(self):
-        df_a = pd.DataFrame({"region": ["East", "North"], "val": [100, 200]})
-        df_b = pd.DataFrame({"region": ["East", "North"], "val": [100, 200]})
-        pd.testing.assert_frame_equal(df_a, df_b)
-
-
-# =============================================================================
 # FEATURE 10: LangGraph Supervisor Router (4 Intents)
 # =============================================================================
 class TestFeature10LangGraphSupervisorRouter:
@@ -843,7 +663,6 @@ class TestFeature10LangGraphSupervisorRouter:
             "query": "Hello",
             "session_id": "sess_123",
             "intent": "GREETING_OR_CHITCHAT",
-            "suggested_strategy": "direct",
             "candidate_datasets": [],
             "pruned_tables": [],
             "generated_code": None,
@@ -899,14 +718,14 @@ class TestFeature12LangfuseObservability:
         spans = [
             {"name": "router", "parent_id": "root", "duration_ms": 12.0},
             {"name": "schema_pruner", "parent_id": "root", "duration_ms": 25.0},
-            {"name": "dedicated_db_engine", "parent_id": "root", "duration_ms": 45.0},
+            {"name": "pandas_sandbox_engine", "parent_id": "root", "duration_ms": 45.0},
             {"name": "synthesizer", "parent_id": "root", "duration_ms": 30.0},
         ]
         assert len(spans) == 4
         assert [s["name"] for s in spans] == [
             "router",
             "schema_pruner",
-            "dedicated_db_engine",
+            "pandas_sandbox_engine",
             "synthesizer",
         ]
 
@@ -989,39 +808,41 @@ class TestFeature13RagasEvaluationSuite:
 # FEATURE 14: Structured Ground-Truth Execution Equivalence Suite
 # =============================================================================
 class TestFeature14StructuredEquivalenceSuite:
-    """Verifies DataFrame execution equivalence vs golden SQL outputs and first-pass rate."""
+    """Verifies DataFrame execution equivalence vs golden outputs and first-pass rate."""
 
     def test_f14_dataframe_exact_equivalence_validation(self):
         golden_df = pd.DataFrame({"region": ["North", "South"], "sales": [560.0, 1070.5]})
         generated_df = pd.DataFrame({"region": ["North", "South"], "sales": [560.0, 1070.5]})
         pd.testing.assert_frame_equal(golden_df, generated_df)
 
-    def test_f14_golden_sql_vs_generated_sql_comparison(self, sample_data_dir):
-        import duckdb
-
+    def test_f14_golden_vs_generated_dataframe_code_comparison(self, sample_data_dir):
+        """Two different pandas formulations of the same question must agree."""
         csv_path = str(sample_data_dir["csv"])
-        con = duckdb.connect(":memory:")
-        golden_sql = f"SELECT region, SUM(amount) AS total FROM read_csv_auto('{csv_path}') GROUP BY region ORDER BY region"
-        generated_sql = f"SELECT region, SUM(amount) AS total FROM read_csv_auto('{csv_path}') GROUP BY 1 ORDER BY 1"
+        df = pd.read_csv(csv_path)
 
-        df_golden = con.execute(golden_sql).df()
-        df_gen = con.execute(generated_sql).df()
-        pd.testing.assert_frame_equal(df_golden, df_gen)
-        con.close()
+        golden = df.groupby("region", as_index=False)["amount"].sum().sort_values("region")
+        generated = (
+            df.pivot_table(index="region", values="amount", aggfunc="sum")
+            .reset_index()
+            .sort_values("region")
+        )
+        pd.testing.assert_frame_equal(
+            golden.reset_index(drop=True), generated.reset_index(drop=True)
+        )
 
     def test_f14_syntax_first_pass_success_rate_metric(self):
         attempts = [True, True, True, False, True]  # 4 successes out of 5
         success_rate = sum(1 for a in attempts if a) / len(attempts)
         assert success_rate == 0.8
 
-    def test_f14_token_cost_and_latency_benchmarking(self):
-        benchmark = {
-            "sql_tokens": 180,
-            "pandas_tokens": 240,
-            "sql_latency_ms": 32.0,
-            "pandas_latency_ms": 45.0,
+    def test_f14_token_cost_and_latency_reporting(self):
+        report = {
+            "prompt_tokens": 180,
+            "completion_tokens": 60,
+            "latency_ms": 45.0,
         }
-        assert benchmark["sql_tokens"] < benchmark["pandas_tokens"]
+        assert report["prompt_tokens"] + report["completion_tokens"] == 240
+        assert report["latency_ms"] > 0
 
     def test_f14_equivalence_mismatch_diff_reporter(self):
         df1 = pd.DataFrame({"val": [1, 2]})
@@ -1042,10 +863,10 @@ class TestFeature15StreamlitUIAndDockerStack:
         assert health_payload["database"] == "connected"
 
     def test_f15_streamlit_ui_tab_configuration_and_routes(self):
-        tabs = ["Ingestion Hub", "Conversational Q&A", "Benchmark Arena"]
-        assert len(tabs) == 3
+        tabs = ["Ingestion Hub", "Conversational Q&A"]
+        assert len(tabs) == 2
         assert "Ingestion Hub" in tabs
-        assert "Benchmark Arena" in tabs
+        assert "Conversational Q&A" in tabs
 
     def test_f15_docker_compose_service_definitions(self):
         expected_services = ["postgres-pgvector", "backend", "frontend", "langfuse"]
@@ -1066,12 +887,9 @@ class TestFeature15StreamlitUIAndDockerStack:
     def test_f15_fastapi_openapi_schema_endpoint(self):
         routes = [
             "/api/ingest/upload",
-            "/api/query/dedicated-db",
-            "/api/query/duckdb",
             "/api/query/pandas-sandbox",
             "/api/query/unstructured-rag",
-            "/api/query/benchmark",
             "/api/agent/query",
         ]
-        assert len(routes) >= 7
-        assert "/api/query/benchmark" in routes
+        assert len(routes) >= 4
+        assert "/api/query/pandas-sandbox" in routes

@@ -10,7 +10,6 @@ import ast
 import json
 import tempfile
 import uuid
-from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
@@ -203,100 +202,7 @@ class TestFeature4Boundaries:
 
 
 # =============================================================================
-# FEATURE 5 BOUNDARIES: Strategy A PostgreSQL
-# =============================================================================
-class TestFeature5Boundaries:
-    """Security, transaction isolation, and timeout boundaries for Strategy A."""
-
-    def test_bva5_sql_injection_drop_table_blocked(self):
-        injection_payloads = [
-            "SELECT * FROM tbl_sales; DROP TABLE tbl_sales; --",
-            "'; DROP TABLE users; --",
-            "SELECT * FROM tbl_sales WHERE 1=1; TRUNCATE tbl_sales;",
-        ]
-        disallowed = ["DROP", "TRUNCATE", "DELETE", "UPDATE", "ALTER", "INSERT"]
-
-        for payload in injection_payloads:
-            has_forbidden = any(word in payload.upper().split() for word in disallowed)
-            assert has_forbidden is True
-
-    def test_bva5_sql_destructive_update_delete_blocked(self):
-        read_only_allowed = ["SELECT", "WITH", "EXPLAIN", "SHOW"]
-        mutations = ["UPDATE tbl_sales SET amount = 0", "DELETE FROM tbl_sales"]
-
-        for sql in mutations:
-            first_keyword = sql.strip().split()[0].upper()
-            assert first_keyword not in read_only_allowed
-
-    def test_bva5_sql_syntax_error_structured_error_response(self):
-        error_response = {
-            "status": "error",
-            "error_type": "SyntaxError",
-            "message": "syntax error at or near 'FORM'",
-            "code": "42601",
-        }
-        assert error_response["status"] == "error"
-        assert "message" in error_response
-
-    def test_bva5_sql_query_timeout_termination(self):
-        # Queries taking > 5000ms should be terminated
-        timeout_ms = 5000
-        simulated_duration_ms = 5200
-        is_timed_out = simulated_duration_ms > timeout_ms
-        assert is_timed_out is True
-
-    def test_bva5_sql_empty_resultset_json_schema(self):
-        empty_res = {"columns": ["id", "amount"], "rows": [], "row_count": 0}
-        assert empty_res["row_count"] == 0
-        assert empty_res["rows"] == []
-        assert isinstance(empty_res["columns"], list)
-
-
-# =============================================================================
-# FEATURE 6 BOUNDARIES: Strategy B DuckDB
-# =============================================================================
-class TestFeature6Boundaries:
-    """Path traversal, missing files, and memory boundary tests for DuckDB engine."""
-
-    def test_bva6_duckdb_path_traversal_attempt_blocked(self):
-        traversal_paths = ["../../../../etc/passwd", "/etc/shadow", "../../root.key"]
-
-        base_dir = Path("/tmp/storage/blobs").resolve()
-        for p in traversal_paths:
-            if p.startswith("/"):
-                is_escaped = True
-            else:
-                resolved = (base_dir / p).resolve()
-                is_escaped = not str(resolved).startswith(str(base_dir))
-            assert is_escaped is True  # Traversal attempt detected
-
-    def test_bva6_duckdb_unsupported_file_extension_handling(self):
-        invalid_ext = "document.exe"
-        allowed_extensions = {".csv", ".parquet", ".xlsx", ".xls"}
-        ext = Path(invalid_ext).suffix.lower()
-        assert ext not in allowed_extensions
-
-    def test_bva6_duckdb_query_missing_blob_file_error(self):
-        import duckdb
-
-        con = duckdb.connect(":memory:")
-        with pytest.raises(Exception):
-            con.execute("SELECT * FROM read_parquet('/nonexistent/path/data.parquet')").df()
-        con.close()
-
-    def test_bva6_duckdb_attach_database_pragma_blocked(self):
-        disallowed_duckdb_cmds = ["ATTACH", "INSTALL", "LOAD", "COPY", "EXPORT"]
-        query = "ATTACH 'mydb.db' AS new_db"
-        assert any(cmd in query.upper() for cmd in disallowed_duckdb_cmds)
-
-    def test_bva6_duckdb_huge_float_nan_inf_serialization(self):
-        df = pd.DataFrame({"val": [np.nan, np.inf, -np.inf, 1e308]})
-        cleaned = df.replace([np.inf, -np.inf], None).fillna(0.0)
-        assert cleaned.iloc[0]["val"] == 0.0
-
-
-# =============================================================================
-# FEATURE 7 BOUNDARIES: Strategy C Sandboxed Python
+# FEATURE 7 BOUNDARIES: Sandboxed Python
 # =============================================================================
 class TestFeature7Boundaries:
     """Security AST attack payloads, infinite loops, and memory limit tests."""
@@ -386,43 +292,6 @@ class TestFeature8Boundaries:
         candidate_citations = ["chunk_1", "chunk_999"]
         sanitized = [c for c in candidate_citations if c in valid_chunk_ids]
         assert sanitized == ["chunk_1"]
-
-
-# =============================================================================
-# FEATURE 9 BOUNDARIES: Benchmark Arena
-# =============================================================================
-class TestFeature9Boundaries:
-    """Failure cascading, partial results, and divergent outputs in Benchmark Arena."""
-
-    def test_bva9_benchmark_single_engine_failure_partial_success(self):
-        results = {
-            "dedicated_db": {"status": "success", "rows": 4},
-            "duckdb": {"status": "success", "rows": 4},
-            "pandas_sandbox": {"status": "error", "error": "TimeoutExpired"},
-        }
-        successful_engines = [k for k, v in results.items() if v["status"] == "success"]
-        assert len(successful_engines) == 2
-        assert "pandas_sandbox" not in successful_engines
-
-    def test_bva9_benchmark_all_engines_timeout_handling(self):
-        results = {k: {"status": "timeout"} for k in ["dedicated_db", "duckdb", "pandas_sandbox"]}
-        assert all(v["status"] == "timeout" for v in results.values())
-
-    def test_bva9_benchmark_nonexistent_dataset_id_handling(self, test_db):
-        nonexistent_id = "00000000-0000-0000-0000-000000000000"
-        record = test_db.fetchone("SELECT * FROM datasets WHERE id = ?", (nonexistent_id,))
-        assert record is None
-
-    def test_bva9_benchmark_divergent_results_flagged_in_equivalence(self):
-        df_a = pd.DataFrame({"total": [100]})
-        df_b = pd.DataFrame({"total": [95]})  # Discrepancy
-        is_equivalent = df_a.equals(df_b)
-        assert is_equivalent is False
-
-    def test_bva9_benchmark_empty_query_string_validation(self):
-        query = "   "
-        is_valid = len(query.strip()) > 0
-        assert is_valid is False
 
 
 # =============================================================================
@@ -518,14 +387,14 @@ class TestFeature13Boundaries:
         assert precision == 0.0
 
     def test_bva13_ragas_identical_answer_relevancy_score_one(self):
-        q = "What is Strategy A?"
-        ans = "Strategy A is Dedicated PostgreSQL Table Text2SQL."
+        q = "What is the Pandas Sandbox?"
+        ans = "The Pandas Sandbox runs generated Python in an isolated subprocess."
         # Perfect relevancy
         score = 1.0
         assert score == 1.0
 
     def test_bva13_ragas_completely_unrelated_answer_score_zero(self):
-        q = "How does DuckDB work?"
+        q = "How does the schema pruner work?"
         ans = "The recipe for chocolate cake includes sugar and flour."
         relevancy = 0.0
         assert relevancy == 0.0

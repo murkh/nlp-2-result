@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS query_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id VARCHAR(64),
     query_text TEXT NOT NULL,
-    engine VARCHAR(32) NOT NULL, -- 'dedicated_db', 'duckdb', 'pandas_sandbox', 'unstructured_rag', 'benchmark'
+    engine VARCHAR(32) NOT NULL, -- 'pandas_sandbox', 'unstructured_rag'
     status VARCHAR(32) NOT NULL, -- 'success', 'error', 'clarification'
     prompt_tokens INTEGER DEFAULT 0,
     completion_tokens INTEGER DEFAULT 0,

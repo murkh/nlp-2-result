@@ -21,20 +21,22 @@ class TestTier4RealWorldWorkloads:
     """8 Complex, realistic end-to-end workload scenarios."""
 
     def test_workload_financial_sales_and_revenue_multi_year_analysis(self, sample_data_dir):
-        """Scenario 1: Financial multi-year sales revenue trend & benchmark analysis."""
-        import duckdb
-
+        """Scenario 1: Financial multi-year sales revenue trend analysis."""
         csv_path = str(sample_data_dir["csv"])
 
-        # Step 1: Execute SQL aggregation across regions
-        con = duckdb.connect(":memory:")
-        sql = (
-            f"SELECT region, SUM(amount) as total_revenue, AVG(amount) as avg_order, "
-            f"SUM(quantity) as total_units FROM read_csv_auto('{csv_path}') "
-            f"GROUP BY region ORDER BY total_revenue DESC LIMIT 20;"
+        # Step 1: Aggregate across regions the way generated sandbox code would
+        res_df = (
+            pd.read_csv(csv_path)
+            .groupby("region")
+            .agg(
+                total_revenue=("amount", "sum"),
+                avg_order=("amount", "mean"),
+                total_units=("quantity", "sum"),
+            )
+            .reset_index()
+            .sort_values("total_revenue", ascending=False)
+            .head(20)
         )
-        res_df = con.execute(sql).df()
-        con.close()
 
         assert len(res_df) == 4
         assert res_df.iloc[0]["total_revenue"] > 0
@@ -75,9 +77,7 @@ class TestTier4RealWorldWorkloads:
         assert set(reorder["product_id"]) == {"P300", "P100"}
 
     def test_workload_healthcare_patient_admission_and_length_of_stay(self, tmp_path):
-        """Scenario 5: Clinical admission records with DuckDB analytical window functions."""
-        import duckdb
-
+        """Scenario 5: Clinical admission records with grouped analytical aggregation."""
         clinical_csv = tmp_path / "clinical_admissions.csv"
         pd.DataFrame(
             {
@@ -102,17 +102,18 @@ class TestTier4RealWorldWorkloads:
             }
         ).to_csv(clinical_csv, index=False)
 
-        con = duckdb.connect(":memory:")
-        sql = (
-            f"SELECT department, admission_type, COUNT(*) as patient_count, "
-            f"AVG(stay_days) as avg_stay, "
-            f"MAX(stay_days) as max_stay "
-            f"FROM read_csv_auto('{clinical_csv}') "
-            f"GROUP BY department, admission_type "
-            f"ORDER BY avg_stay DESC LIMIT 20;"
+        res = (
+            pd.read_csv(clinical_csv)
+            .groupby(["department", "admission_type"])
+            .agg(
+                patient_count=("patient_id", "count"),
+                avg_stay=("stay_days", "mean"),
+                max_stay=("stay_days", "max"),
+            )
+            .reset_index()
+            .sort_values("avg_stay", ascending=False)
+            .head(20)
         )
-        res = con.execute(sql).df()
-        con.close()
 
         assert len(res) >= 3
         assert res.iloc[0]["avg_stay"] >= 5.0
@@ -131,51 +132,17 @@ class TestTier4RealWorldWorkloads:
         west_sales = sales_df[sales_df["region"] == "West"]["amount"].sum()
         assert west_sales == (980.0 + 890.0)
 
-    def test_workload_automated_benchmark_and_ragas_quality_audit(self, sample_data_dir):
+    def test_workload_automated_equivalence_and_ragas_quality_audit(self, sample_data_dir):
         """Scenario 8: Automated quality audit scorecard measuring equivalence & Ragas scores."""
-        # Audit benchmark results across 5 standard test cases
         audit_records = [
-            {
-                "query_id": "Q1",
-                "strategy_a_pass": True,
-                "strategy_b_pass": True,
-                "strategy_c_pass": True,
-                "ragas_faithfulness": 0.98,
-            },
-            {
-                "query_id": "Q2",
-                "strategy_a_pass": True,
-                "strategy_b_pass": True,
-                "strategy_c_pass": True,
-                "ragas_faithfulness": 1.00,
-            },
-            {
-                "query_id": "Q3",
-                "strategy_a_pass": True,
-                "strategy_b_pass": True,
-                "strategy_c_pass": True,
-                "ragas_faithfulness": 0.95,
-            },
-            {
-                "query_id": "Q4",
-                "strategy_a_pass": True,
-                "strategy_b_pass": True,
-                "strategy_c_pass": True,
-                "ragas_faithfulness": 0.96,
-            },
-            {
-                "query_id": "Q5",
-                "strategy_a_pass": True,
-                "strategy_b_pass": True,
-                "strategy_c_pass": True,
-                "ragas_faithfulness": 0.99,
-            },
+            {"query_id": "Q1", "equivalent": True, "ragas_faithfulness": 0.98},
+            {"query_id": "Q2", "equivalent": True, "ragas_faithfulness": 1.00},
+            {"query_id": "Q3", "equivalent": True, "ragas_faithfulness": 0.95},
+            {"query_id": "Q4", "equivalent": True, "ragas_faithfulness": 0.96},
+            {"query_id": "Q5", "equivalent": True, "ragas_faithfulness": 0.99},
         ]
 
-        all_passed = all(
-            r["strategy_a_pass"] and r["strategy_b_pass"] and r["strategy_c_pass"]
-            for r in audit_records
-        )
+        all_passed = all(r["equivalent"] for r in audit_records)
         avg_faithfulness = sum(r["ragas_faithfulness"] for r in audit_records) / len(audit_records)
 
         assert all_passed is True

@@ -261,20 +261,8 @@ class BaseQueryRequest(BaseModel):
         super().__init__(query=query, dataset_ids=dataset_ids, temperature=temperature, **kwargs)
 
 
-class QueryDedicatedDBRequest(BaseQueryRequest):
-    """Request for Strategy A: PostgreSQL Dedicated DB Engine."""
-
-    pass
-
-
-class QueryDuckDBRequest(BaseQueryRequest):
-    """Request for Strategy B: DuckDB In-Memory Engine."""
-
-    pass
-
-
 class QueryPandasSandboxRequest(BaseQueryRequest):
-    """Request for Strategy C: Sandboxed Python DataFrame Engine."""
+    """Request for the Sandboxed Python DataFrame Engine."""
 
     pass
 
@@ -299,45 +287,17 @@ class QueryUnstructuredRAGRequest(BaseQueryRequest):
         )
 
 
-class QueryBenchmarkRequest(BaseQueryRequest):
-    """Request for 3-Way Parallel Benchmark Arena."""
-
-    include_raw_data: bool = Field(
-        default=True, description="Include full tabular rows in response"
-    )
-
-    def __init__(
-        self,
-        query: str,
-        include_raw_data: bool = True,
-        dataset_ids: Optional[List[str]] = None,
-        temperature: float = 0.0,
-        **kwargs,
-    ):
-        super().__init__(
-            query=query,
-            dataset_ids=dataset_ids,
-            temperature=temperature,
-            include_raw_data=include_raw_data,
-            **kwargs,
-        )
-
-
 class QueryAgentRequest(BaseQueryRequest):
     """Request for Conversational Multi-Agent Supervisor Q&A endpoint."""
 
     session_id: Optional[str] = Field(
         default=None, description="Optional conversational session / thread ID"
     )
-    suggested_strategy: Optional[str] = Field(
-        default=None, description="Optional override strategy preference"
-    )
 
     def __init__(
         self,
         query: str,
         session_id: Optional[str] = None,
-        suggested_strategy: Optional[str] = None,
         dataset_ids: Optional[List[str]] = None,
         temperature: float = 0.0,
         **kwargs,
@@ -347,7 +307,6 @@ class QueryAgentRequest(BaseQueryRequest):
             dataset_ids=dataset_ids,
             temperature=temperature,
             session_id=session_id,
-            suggested_strategy=suggested_strategy,
             **kwargs,
         )
 
@@ -437,144 +396,8 @@ class SchemaContextRef(BaseModel):
         )
 
 
-class QueryDedicatedDBResponse(BaseModel):
-    """Response from Strategy A: PostgreSQL Dedicated DB Query Engine."""
-
-    query: str = Field(..., description="Original user query")
-    answer: str = Field(..., description="Synthesized natural language answer with data evidence")
-    sql_query: str = Field(..., description="Generated PostgreSQL dialect SQL query")
-    tabular_result: TabularResult = Field(
-        default_factory=TabularResult, description="Execution result table"
-    )
-    thinking_process: Optional[ThinkingProcess] = Field(
-        default=None, description="Transparent decision and reasoning trail"
-    )
-    metrics: ExecutionMetrics = Field(
-        default_factory=ExecutionMetrics, description="Latency breakdown"
-    )
-    token_usage: TokenUsage = Field(
-        default_factory=TokenUsage, description="Token counts and estimated cost"
-    )
-    error: Optional[str] = Field(default=None, description="Error message if execution failed")
-    schema_context: Optional[SchemaContextRef] = Field(
-        default=None, description="Pruned schema slice for the projection critic"
-    )
-
-    def __init__(
-        self,
-        query: str,
-        answer: str,
-        sql_query: str,
-        tabular_result: Optional[Union[TabularResult, Dict[str, Any]]] = None,
-        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
-        metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
-        token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
-        error: Optional[str] = None,
-        **kwargs,
-    ):
-        tab = (
-            tabular_result
-            if isinstance(tabular_result, TabularResult)
-            else TabularResult(**(tabular_result or {}))
-        )
-        think = (
-            thinking_process
-            if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None)
-            else ThinkingProcess(**thinking_process)
-        )
-        met = (
-            metrics
-            if isinstance(metrics, ExecutionMetrics)
-            else ExecutionMetrics(**(metrics or {}))
-        )
-        tok = (
-            token_usage
-            if isinstance(token_usage, TokenUsage)
-            else TokenUsage(**(token_usage or {}))
-        )
-        super().__init__(
-            query=query,
-            answer=answer,
-            sql_query=sql_query,
-            tabular_result=tab,
-            thinking_process=think,
-            metrics=met,
-            token_usage=tok,
-            error=error,
-            **kwargs,
-        )
-
-
-class QueryDuckDBResponse(BaseModel):
-    """Response from Strategy B: DuckDB In-Memory Query Engine."""
-
-    query: str = Field(..., description="Original user query")
-    answer: str = Field(..., description="Synthesized natural language answer with data evidence")
-    sql_query: str = Field(..., description="Generated DuckDB SQL query")
-    tabular_result: TabularResult = Field(
-        default_factory=TabularResult, description="Execution result table"
-    )
-    thinking_process: Optional[ThinkingProcess] = Field(
-        default=None, description="Transparent decision and reasoning trail"
-    )
-    metrics: ExecutionMetrics = Field(
-        default_factory=ExecutionMetrics, description="Latency breakdown"
-    )
-    token_usage: TokenUsage = Field(
-        default_factory=TokenUsage, description="Token counts and estimated cost"
-    )
-    error: Optional[str] = Field(default=None, description="Error message if execution failed")
-    schema_context: Optional[SchemaContextRef] = Field(
-        default=None, description="Pruned schema slice for the projection critic"
-    )
-
-    def __init__(
-        self,
-        query: str,
-        answer: str,
-        sql_query: str,
-        tabular_result: Optional[Union[TabularResult, Dict[str, Any]]] = None,
-        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
-        metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
-        token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
-        error: Optional[str] = None,
-        **kwargs,
-    ):
-        tab = (
-            tabular_result
-            if isinstance(tabular_result, TabularResult)
-            else TabularResult(**(tabular_result or {}))
-        )
-        think = (
-            thinking_process
-            if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None)
-            else ThinkingProcess(**thinking_process)
-        )
-        met = (
-            metrics
-            if isinstance(metrics, ExecutionMetrics)
-            else ExecutionMetrics(**(metrics or {}))
-        )
-        tok = (
-            token_usage
-            if isinstance(token_usage, TokenUsage)
-            else TokenUsage(**(token_usage or {}))
-        )
-        super().__init__(
-            query=query,
-            answer=answer,
-            sql_query=sql_query,
-            tabular_result=tab,
-            thinking_process=think,
-            metrics=met,
-            token_usage=tok,
-            error=error,
-            **kwargs,
-        )
-
-
 class QueryPandasSandboxResponse(BaseModel):
-    """Response from Strategy C: Sandboxed Python DataFrame Engine."""
+    """Response from the Sandboxed Python DataFrame Engine."""
 
     query: str = Field(..., description="Original user query")
     answer: str = Field(..., description="Synthesized natural language answer with data evidence")
@@ -718,163 +541,6 @@ class QueryUnstructuredRAGResponse(BaseModel):
         )
 
 
-# =============================================================================
-# Benchmark Arena Schemas
-# =============================================================================
-
-
-class StrategyBenchmarkResult(BaseModel):
-    """Individual strategy outcome within the Benchmark Arena."""
-
-    strategy_name: str = Field(
-        ..., description="Strategy A (Postgres), Strategy B (DuckDB), or Strategy C (Pandas)"
-    )
-    status: str = Field(..., description="SUCCESS or FAILED")
-    code_generated: str = Field(default="", description="Generated SQL query or Python code")
-    answer: str = Field(default="", description="Synthesized answer")
-    tabular_result: TabularResult = Field(
-        default_factory=TabularResult, description="Result records and column schema"
-    )
-    thinking_process: Optional[ThinkingProcess] = Field(
-        default=None, description="Transparent decision and reasoning trail"
-    )
-    metrics: ExecutionMetrics = Field(
-        default_factory=ExecutionMetrics, description="Latency breakdown"
-    )
-    token_usage: TokenUsage = Field(default_factory=TokenUsage, description="Token usage")
-    error: Optional[str] = Field(default=None, description="Error message if failed")
-
-    def __init__(
-        self,
-        strategy_name: str,
-        status: str,
-        code_generated: str = "",
-        answer: str = "",
-        tabular_result: Optional[Union[TabularResult, Dict[str, Any]]] = None,
-        thinking_process: Optional[Union[ThinkingProcess, Dict[str, Any]]] = None,
-        metrics: Optional[Union[ExecutionMetrics, Dict[str, Any]]] = None,
-        token_usage: Optional[Union[TokenUsage, Dict[str, Any]]] = None,
-        error: Optional[str] = None,
-        **kwargs,
-    ):
-        tab = (
-            tabular_result
-            if isinstance(tabular_result, TabularResult)
-            else TabularResult(**(tabular_result or {}))
-        )
-        think = (
-            thinking_process
-            if (isinstance(thinking_process, ThinkingProcess) or thinking_process is None)
-            else ThinkingProcess(**thinking_process)
-        )
-        met = (
-            metrics
-            if isinstance(metrics, ExecutionMetrics)
-            else ExecutionMetrics(**(metrics or {}))
-        )
-        tok = (
-            token_usage
-            if isinstance(token_usage, TokenUsage)
-            else TokenUsage(**(token_usage or {}))
-        )
-        super().__init__(
-            strategy_name=strategy_name,
-            status=status,
-            code_generated=code_generated,
-            answer=answer,
-            tabular_result=tab,
-            thinking_process=think,
-            metrics=met,
-            token_usage=tok,
-            error=error,
-            **kwargs,
-        )
-
-
-class BenchmarkComparisonSummary(BaseModel):
-    """Head-to-head comparative analysis of the three structured processing strategies."""
-
-    fastest_strategy: str = Field(..., description="Strategy with lowest total latency")
-    most_token_efficient_strategy: str = Field(..., description="Strategy with lowest total tokens")
-    consensus_reached: bool = Field(
-        default=True, description="Whether successful strategies produced equivalent results"
-    )
-    summary_analysis: str = Field(
-        default="", description="Comparative summary of performance, cost, and accuracy"
-    )
-
-    def __init__(
-        self,
-        fastest_strategy: str,
-        most_token_efficient_strategy: str,
-        consensus_reached: bool = True,
-        summary_analysis: str = "",
-        **kwargs,
-    ):
-        super().__init__(
-            fastest_strategy=fastest_strategy,
-            most_token_efficient_strategy=most_token_efficient_strategy,
-            consensus_reached=consensus_reached,
-            summary_analysis=summary_analysis,
-            **kwargs,
-        )
-
-
-class QueryBenchmarkResponse(BaseModel):
-    """Comprehensive response from the 3-Way Parallel Benchmark Arena."""
-
-    query: str = Field(..., description="Original user query")
-    strategy_a: StrategyBenchmarkResult = Field(..., description="PostgreSQL Dedicated DB results")
-    strategy_b: StrategyBenchmarkResult = Field(..., description="DuckDB In-Memory results")
-    strategy_c: StrategyBenchmarkResult = Field(..., description="Pandas Sandbox results")
-    benchmark_summary: BenchmarkComparisonSummary = Field(
-        ..., description="Head-to-head comparative analysis"
-    )
-    total_arena_latency_ms: float = Field(
-        ..., description="Total wall-clock latency for parallel arena execution in ms"
-    )
-
-    def __init__(
-        self,
-        query: str,
-        strategy_a: Union[StrategyBenchmarkResult, Dict[str, Any]],
-        strategy_b: Union[StrategyBenchmarkResult, Dict[str, Any]],
-        strategy_c: Union[StrategyBenchmarkResult, Dict[str, Any]],
-        benchmark_summary: Union[BenchmarkComparisonSummary, Dict[str, Any]],
-        total_arena_latency_ms: float = 0.0,
-        **kwargs,
-    ):
-        sa = (
-            strategy_a
-            if isinstance(strategy_a, StrategyBenchmarkResult)
-            else StrategyBenchmarkResult(**strategy_a)
-        )
-        sb = (
-            strategy_b
-            if isinstance(strategy_b, StrategyBenchmarkResult)
-            else StrategyBenchmarkResult(**strategy_b)
-        )
-        sc = (
-            strategy_c
-            if isinstance(strategy_c, StrategyBenchmarkResult)
-            else StrategyBenchmarkResult(**strategy_c)
-        )
-        bs = (
-            benchmark_summary
-            if isinstance(benchmark_summary, BenchmarkComparisonSummary)
-            else BenchmarkComparisonSummary(**benchmark_summary)
-        )
-        super().__init__(
-            query=query,
-            strategy_a=sa,
-            strategy_b=sb,
-            strategy_c=sc,
-            benchmark_summary=bs,
-            total_arena_latency_ms=round(total_arena_latency_ms, 2),
-            **kwargs,
-        )
-
-
 class QueryAgentResponse(BaseModel):
     """Response from Conversational Multi-Agent Supervisor Q&A endpoint."""
 
@@ -883,7 +549,9 @@ class QueryAgentResponse(BaseModel):
     intent: str = Field(..., description="Classified intent route")
     confidence: float = Field(default=0.95, description="Classification confidence")
     routing_reason: str = Field(default="", description="Reasoning for route selection")
-    suggested_strategy: Optional[str] = Field(default=None, description="Strategy selected or used")
+    suggested_strategy: Optional[str] = Field(
+        default=None, description="Execution engine used for this answer"
+    )
     answer: str = Field(..., description="Synthesized natural language answer with evidence")
     generated_code: Optional[str] = Field(
         default=None, description="Generated SQL query or Python code if structured"

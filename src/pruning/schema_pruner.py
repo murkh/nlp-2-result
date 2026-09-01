@@ -182,7 +182,7 @@ class TwoStageSchemaPruner:
         selected_table_ids = [t["id"] for t in candidate_tables_raw]
         table_map: Dict[str, PrunedTable] = {}
 
-        # Resolve dataset file paths for DuckDB/Pandas engines
+        # Resolve dataset file paths for the Pandas sandbox
         for t in candidate_tables_raw:
             dataset_rec = self.db_manager.get_dataset(t["dataset_id"])
             abs_blob = None

@@ -6,7 +6,7 @@ bracketed citations, and execution telemetry metadata.
 
 from typing import Any, Dict, List, Optional
 
-from src.agent.state import AgentState
+from src.agent.state import STRATEGY_LABEL, AgentState
 from src.feedback import EXECUTION_ERROR, advice_for, classify_error
 from src.observability.telemetry import get_tracer
 
@@ -71,7 +71,6 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
     query = state.get("query", "")
     session_id = state.get("session_id", "")
     intent = state.get("intent", "STRUCTURED_QUERY")
-    strategy = state.get("suggested_strategy") or "duckdb"
     generated_code = state.get("generated_code")
     execution_result = state.get("execution_result") or []
     execution_columns = state.get("execution_columns") or []
@@ -88,7 +87,7 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
             "synthesize_final_response",
             input_data={
                 "intent": intent,
-                "strategy": strategy,
+                "strategy": STRATEGY_LABEL,
                 "rows_count": len(execution_result),
                 "chunks_count": len(retrieved_chunks),
                 "has_error": bool(execution_error),
@@ -113,7 +112,10 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
                 key = list(execution_result[0].keys())[0]
                 base_text = f"The result for **{query}** is **{val}** ({key})."
             elif execution_result:
-                base_text = f"Query executed successfully via {strategy.replace('_', ' ').title()}. Found {len(execution_result)} matching record(s)."
+                base_text = (
+                    "Query executed successfully via the Python/Pandas sandbox. "
+                    f"Found {len(execution_result)} matching record(s)."
+                )
             else:
                 base_text = "Query executed successfully, but returned zero rows."
 
@@ -134,16 +136,7 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
 
             # Ensure citations are recorded
             if not citations:
-                strat_label = (
-                    "DuckDB (In-Memory)"
-                    if strategy == "duckdb"
-                    else (
-                        "PostgreSQL (Dedicated DB)"
-                        if strategy == "dedicated_db"
-                        else "Pandas Sandbox"
-                    )
-                )
-                citations.append(f"[Engine: {strat_label}, Rows: {len(execution_result)}]")
+                citations.append(f"[Engine: Pandas Sandbox, Rows: {len(execution_result)}]")
 
         elif intent == "UNSTRUCTURED_QUERY":
             if raw_answer:
@@ -183,7 +176,7 @@ def synthesizer_node(state: AgentState) -> Dict[str, Any]:
                 "trace_id": trace.trace_id,
                 "route": intent,
                 "strategy_used": (
-                    strategy
+                    STRATEGY_LABEL
                     if intent == "STRUCTURED_QUERY"
                     else ("hybrid_rag" if intent == "UNSTRUCTURED_QUERY" else None)
                 ),

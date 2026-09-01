@@ -7,6 +7,9 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, TypedDict, Uni
 
 from langchain_core.messages import BaseMessage
 
+# The only structured engine. Reported in telemetry so runs stay comparable.
+STRATEGY_LABEL = "pandas_sandbox"
+
 
 class TelemetryData(TypedDict, total=False):
     """Execution telemetry recorded across graph nodes."""
@@ -20,7 +23,6 @@ class TelemetryData(TypedDict, total=False):
     latency_ms: float
     execution_success: bool
     error: Optional[str]
-    projection_critic: Dict[str, Any]
     loop: Dict[str, Any]
 
 
@@ -40,11 +42,10 @@ class AgentState(TypedDict, total=False):
     ]
     confidence: float
     routing_reason: str
-    suggested_strategy: Optional[Literal["dedicated_db", "duckdb", "pandas_sandbox"]]
 
     # Schema & Dataset Context
     candidate_datasets: List[str]
-    # Pruned schema slice (SchemaContextRef) the loop and critic reason over.
+    # Pruned schema slice (SchemaContextRef) the loop reasons over.
     pruned_tables: Dict[str, Any]
     # DDL prompt snippet for the generators. Kept out of pruned_tables so engine
     # API responses stay free of DDL text.
@@ -61,10 +62,9 @@ class AgentState(TypedDict, total=False):
     # Accumulates across iterations. Order is significant for prompt
     # reproducibility, so only sequential nodes may append.
     observations: Annotated[List[Dict[str, Any]], operator.add]
-    # Written by explorer_planner only: a single sequential writer is what makes
-    # the retry budget well-defined.
+    # Written by code_generator only (plus the reset in schema_retriever): a
+    # single sequential writer is what makes the retry budget well-defined.
     loop_iterations: int
-    probe_plan: List[Dict[str, Any]]
     reflection_class: Optional[str]
 
     # Synthesis & Outputs

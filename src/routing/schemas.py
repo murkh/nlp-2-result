@@ -4,7 +4,7 @@ Strict schemas for the Supervisor Intent Classifier and Router.
 Four intent routes:
 - GREETING_OR_CHITCHAT: direct conversational reply, zero database lookups.
 - AMBIGUOUS_QUERY: proactive clarification with candidate dataset suggestions.
-- STRUCTURED_QUERY: SQL / DataFrame execution engines.
+- STRUCTURED_QUERY: sandboxed Python/Pandas DataFrame execution.
 - UNSTRUCTURED_QUERY: hybrid dense+sparse document RAG.
 """
 
@@ -19,8 +19,6 @@ IntentType = Literal[
     "UNSTRUCTURED_QUERY",
 ]
 
-StrategyType = Literal["dedicated_db", "duckdb", "pandas_sandbox"]
-
 RouteEngineType = Literal["semantic_fastpath", "llm_fallback", "heuristic_guardrail"]
 
 
@@ -32,9 +30,6 @@ class SupervisorDecision(BaseModel):
     reasoning: str = Field(default="", description="Explanation of routing classification")
     route_engine: RouteEngineType = Field(
         default="semantic_fastpath", description="Which routing tier produced this decision"
-    )
-    suggested_strategy: Optional[StrategyType] = Field(
-        default="duckdb", description="Suggested execution strategy for structured queries"
     )
     relevant_datasets: List[str] = Field(
         default_factory=list, description="Target dataset names/IDs if identified"
@@ -64,5 +59,4 @@ class LLMIntentDecision(BaseModel):
     intent: IntentType
     confidence: float
     reasoning: str
-    suggested_strategy: Optional[StrategyType]
     clarification_question: Optional[str]

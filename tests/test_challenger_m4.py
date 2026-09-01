@@ -287,7 +287,7 @@ class TestStructuredEquivalenceAdversarialStress(unittest.TestCase):
 
     def test_mixed_types_and_string_represented_numbers(self):
         """Verify columns with string-represented numbers match actual numeric columns after normalization."""
-        # e.g. DuckDB returning float vs Postgres returning numeric string or int vs float
+        # e.g. a numeric string vs a float, or an int vs a float
         df_gold = pd.DataFrame(
             {
                 "order_id": [1, 2, 3],
@@ -449,10 +449,10 @@ class TestBenchmarkRunnerAndTelemetryAdversarialStress(unittest.TestCase):
         self.assertEqual(cost_unknown, cost_mini)
 
     def test_structured_evaluator_large_100_case_benchmark(self):
-        """Verify StructuredEquivalenceEvaluator aggregates 100 cases across 3 engines cleanly."""
+        """Verify StructuredEquivalenceEvaluator aggregates 100 cases across 3 run modes cleanly."""
         test_cases = []
         for i in range(100):
-            eng = ["dedicated_db", "duckdb", "pandas_sandbox"][i % 3]
+            eng = ["single_pass", "agentic", "agentic_reflection"][i % 3]
             is_match = i % 4 != 0  # 75% match, 25% mismatch
             val_gen = float(i) if is_match else float(i + 9999)
 
@@ -480,9 +480,9 @@ class TestBenchmarkRunnerAndTelemetryAdversarialStress(unittest.TestCase):
         self.assertIsInstance(result, StructuredBenchmarkResult)
         self.assertEqual(result.total_cases, 100)
         self.assertEqual(len(result.details), 100)
-        self.assertIn("dedicated_db", result.per_engine_stats)
-        self.assertIn("duckdb", result.per_engine_stats)
-        self.assertIn("pandas_sandbox", result.per_engine_stats)
+        self.assertIn("single_pass", result.per_engine_stats)
+        self.assertIn("agentic", result.per_engine_stats)
+        self.assertIn("agentic_reflection", result.per_engine_stats)
 
         # Summary check
         sum_dict = result.summary_dict()

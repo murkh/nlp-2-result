@@ -1,7 +1,7 @@
 """
 Structured Execution Equivalence Evaluation Suite.
 Evaluates Ground-Truth execution equivalence between generated SQL/Python DataFrame queries
-and golden baseline outputs across Strategy A (PostgreSQL), Strategy B (DuckDB), and Strategy C (Pandas).
+and golden baseline outputs for the sandboxed Python/Pandas engine.
 
 Computes:
   1. DataFrame Normalization (casing, column order, 4-decimal float rounding, row sorting)
@@ -388,7 +388,7 @@ class StructuredEquivalenceEvaluator:
         query: str,
         df_generated: Any,
         df_golden: Any,
-        engine: str = "dedicated_db",
+        engine: str = "pandas_sandbox",
         latency_ms: float = 0.0,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,

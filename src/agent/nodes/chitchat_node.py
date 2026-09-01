@@ -27,9 +27,8 @@ def chitchat_node(state: AgentState) -> Dict[str, Any]:
         ):
             answer = (
                 "I am your Multi-Agent Knowledge Base Q&A Assistant. I can help you with:\n"
-                "1. **Structured Data Analysis**: Query orders, sales, customer data using PostgreSQL, DuckDB, or Pandas.\n"
-                "2. **Unstructured Document Search**: Retrieve and ground answers from policy handbooks, SOPs, and manuals.\n"
-                "3. **Multi-Strategy Benchmarking**: Compare query performance and results across 3 processing engines.\n\n"
+                "1. **Structured Data Analysis**: Query orders, sales, customer data with a sandboxed Python/Pandas engine.\n"
+                "2. **Unstructured Document Search**: Retrieve and ground answers from policy handbooks, SOPs, and manuals.\n\n"
                 "How can I assist you today?"
             )
         elif any(w in query for w in ["bye", "goodbye", "see you"]):

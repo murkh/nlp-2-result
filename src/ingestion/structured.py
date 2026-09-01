@@ -1,7 +1,8 @@
 """
 Structured Ingestion Engine for CSV, Parquet, and Excel Datasets.
-Saves raw files to Blob Storage, creates dedicated PostgreSQL dynamic tables (Strategy A),
-and populates TableMetadata & ColumnMetadata for two-stage schema pruning.
+Saves raw files to Blob Storage and populates TableMetadata & ColumnMetadata for
+two-stage schema pruning. The blob is the only copy of the data: the Pandas
+sandbox reads it directly.
 """
 
 import csv
@@ -48,8 +49,8 @@ def sanitize_table_name(dataset_id: str, raw_name: str) -> str:
 
 class StructuredIngestionEngine:
     """
-    Engine for loading CSV, Parquet, and Excel files into Blob Storage,
-    creating dedicated PostgreSQL tables, and indexing metadata embeddings.
+    Engine for loading CSV, Parquet, and Excel files into Blob Storage and
+    indexing metadata embeddings.
     """
 
     def __init__(
@@ -73,10 +74,8 @@ class StructuredIngestionEngine:
         Full structured ingestion workflow:
         1. Save raw file to Blob Storage
         2. Parse columns and rows (CSV, Parquet, or Excel)
-        3. Create dedicated SQL table (tbl_<id>_<name>)
-        4. Bulk insert rows
-        5. Extract and embed table & column metadata
-        6. Record in datasets registry
+        3. Extract and embed table & column metadata
+        4. Record in datasets registry
         """
         # 1. Save to blob store
         dataset_id = str(uuid.uuid4())
@@ -105,7 +104,7 @@ class StructuredIngestionEngine:
                 unique_cols.append(c)
         clean_columns = unique_cols
 
-        # 3. Create dedicated table name
+        # 3. Logical table identity (the metadata key, not a physical table)
         base_name = Path(filename).stem
         table_name = sanitize_table_name(d_id, base_name)
         human_display_name = display_name or base_name.replace("_", " ").title()
@@ -120,17 +119,7 @@ class StructuredIngestionEngine:
             table_description=description,
         )
 
-        # 5. Create dedicated table in DB
-        col_defs = [(c.column_name, c.data_type) for c in col_metas]
-        pk_col = next((c.column_name for c in col_metas if c.is_primary_key), None)
-        self.db_manager.create_dedicated_table(
-            table_name=table_name, column_defs=col_defs, pkey_col=pk_col
-        )
-
-        # 6. Bulk insert rows into dedicated table
-        self.db_manager.insert_table_rows(table_name=table_name, columns=clean_columns, rows=rows)
-
-        # 7. Record in datasets registry (must precede table_metadata: FK dependency)
+        # 5. Record in datasets registry (must precede table_metadata: FK dependency)
         dataset_record = Dataset(
             id=d_id,
             name=human_display_name,
@@ -145,7 +134,7 @@ class StructuredIngestionEngine:
         )
         self.db_manager.save_dataset(dataset_record)
 
-        # 8. Save metadata into catalog
+        # 6. Save metadata into catalog
         self.db_manager.save_table_metadata(table_meta)
         for col_meta in col_metas:
             self.db_manager.save_column_metadata(col_meta)

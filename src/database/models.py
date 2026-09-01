@@ -47,7 +47,7 @@ class Dataset:
 
 @dataclass
 class TableMetadata:
-    """Metadata record for a dedicated structured table (used in Stage 1 pruning)."""
+    """Metadata record for an ingested structured table (used in Stage 1 pruning)."""
 
     dataset_id: str
     table_name: str

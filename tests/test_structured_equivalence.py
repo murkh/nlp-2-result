@@ -175,7 +175,7 @@ class TestStructuredEquivalence(unittest.TestCase):
             {
                 "test_id": "tc1",
                 "query": "Select all orders",
-                "engine": "dedicated_db",
+                "engine": "single_pass",
                 "df_golden": pd.DataFrame({"id": [101, 102], "amount": [150.5, 280.0]}),
                 "df_generated": pd.DataFrame({"id": [101, 102], "amount": [150.5, 280.0]}),
                 "latency_ms": 25.0,
@@ -185,7 +185,7 @@ class TestStructuredEquivalence(unittest.TestCase):
             {
                 "test_id": "tc2",
                 "query": "Count completed orders",
-                "engine": "duckdb",
+                "engine": "agentic",
                 "df_golden": pd.DataFrame({"count": [2]}),
                 "df_generated": pd.DataFrame({"count": [2]}),
                 "latency_ms": 15.0,
@@ -195,7 +195,7 @@ class TestStructuredEquivalence(unittest.TestCase):
             {
                 "test_id": "tc3",
                 "query": "Average order amount",
-                "engine": "pandas_sandbox",
+                "engine": "agentic_reflection",
                 "df_golden": pd.DataFrame({"avg": [215.25]}),
                 "df_generated": pd.DataFrame({"avg": [999.99]}),  # Mismatch
                 "latency_ms": 40.0,
@@ -211,9 +211,9 @@ class TestStructuredEquivalence(unittest.TestCase):
         self.assertEqual(result.total_cases, 3)
         self.assertEqual(result.syntax_first_pass_rate, 1.0)
         self.assertAlmostEqual(result.equivalence_rate, 2 / 3, places=2)
-        self.assertIn("dedicated_db", result.per_engine_stats)
-        self.assertIn("duckdb", result.per_engine_stats)
-        self.assertIn("pandas_sandbox", result.per_engine_stats)
+        self.assertIn("single_pass", result.per_engine_stats)
+        self.assertIn("agentic", result.per_engine_stats)
+        self.assertIn("agentic_reflection", result.per_engine_stats)
 
         # Check export
         df_report = result.to_dataframe()

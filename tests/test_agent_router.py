@@ -106,7 +106,6 @@ class TestAgentRouter(unittest.TestCase):
                 f"Query '{q}' should classify as GREETING_OR_CHITCHAT, got {decision.intent}",
             )
             self.assertGreaterEqual(decision.confidence, 0.9)
-            self.assertIsNone(decision.suggested_strategy)
             self.assertIsNone(decision.clarification_question)
 
     def test_router_ambiguous_queries(self):
@@ -151,28 +150,7 @@ class TestAgentRouter(unittest.TestCase):
                 f"Query '{q}' should classify as STRUCTURED_QUERY, got {decision.intent}",
             )
             self.assertGreaterEqual(decision.confidence, 0.75)
-            self.assertIn(decision.suggested_strategy, ["duckdb", "dedicated_db", "pandas_sandbox"])
-
-    @requires_llm
-    def test_router_strategy_hints(self):
-        """Engine-hinted queries stay STRUCTURED_QUERY and pick a valid engine.
-
-        The keyword-to-engine mapping is now a prompt instruction, not a heuristic
-        fallback, so the exact engine is the classifier's call, not a hard guarantee.
-        """
-        hinted = [
-            "Run pandas dataframe analysis to count completed orders",
-            "Query dedicated postgres table for total sales",
-            "How many total orders?",
-        ]
-        for q in hinted:
-            decision = self.router.classify_intent(q)
-            self.assertEqual(decision.intent, "STRUCTURED_QUERY", q)
-            self.assertIn(
-                decision.suggested_strategy,
-                ["duckdb", "dedicated_db", "pandas_sandbox"],
-                q,
-            )
+            self.assertTrue(decision.relevant_datasets or decision.reasoning)
 
     @requires_llm
     def test_router_unstructured_queries(self):
@@ -276,7 +254,7 @@ class TestAgentRouter(unittest.TestCase):
             "query": "Show completed orders",
             "session_id": "test_synth_1",
             "intent": "STRUCTURED_QUERY",
-            "suggested_strategy": "duckdb",
+            "suggested_strategy": "pandas_sandbox",
             "execution_result": rows,
             "execution_columns": ["order_id", "status", "total_amount"],
             "execution_error": None,

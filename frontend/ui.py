@@ -1,9 +1,8 @@
 """
 Streamlit Web UI for Multi-Agent Knowledge Base Q&A Platform.
-Provides a 3-tab interactive web interface:
+Provides a 2-tab interactive web interface:
 1. Ingestion Hub (Structured & Unstructured file upload, dataset catalog preview)
 2. Conversational Q&A (LangGraph supervisor routing, engine selector, telemetry panels)
-3. Benchmark Arena (Parallel 3-way Strategy A vs B vs C head-to-head comparison)
 """
 
 import os
@@ -64,16 +63,6 @@ CUSTOM_CSS = """
     .badge-unstructured { background-color: #8B5CF6; color: white; }
     .badge-success { background-color: #10B981; color: white; }
     .badge-failed { background-color: #EF4444; color: white; }
-
-    /* Strategy Columns in Benchmark */
-    .benchmark-col-header {
-        background-color: #2D3748;
-        padding: 10px;
-        border-radius: 6px;
-        text-align: center;
-        font-weight: 600;
-        margin-bottom: 10px;
-    }
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -90,8 +79,6 @@ def init_session_state():
         st.session_state["session_id"] = str(uuid.uuid4())
     if "messages" not in st.session_state:
         st.session_state["messages"] = []
-    if "benchmark_history" not in st.session_state:
-        st.session_state["benchmark_history"] = []
     if "backend_url" not in st.session_state:
         st.session_state["backend_url"] = os.getenv("BACKEND_URL", "http://localhost:8000")
 
@@ -266,11 +253,10 @@ def render_model_thinking(thinking_data: Optional[Dict[str, Any]], default_expan
 # Main Tabs Layout
 # -----------------------------------------------------------------------------
 
-tab_ingest, tab_qa, tab_benchmark = st.tabs(
+tab_ingest, tab_qa = st.tabs(
     [
         "📥 Ingestion Hub",
         "💬 Conversational Q&A",
-        "⚔️ Benchmark Arena",
     ]
 )
 
@@ -280,10 +266,10 @@ tab_ingest, tab_qa, tab_benchmark = st.tabs(
 # =============================================================================
 
 with tab_ingest:
-    st.header("📥 Multi-Strategy Ingestion Hub")
+    st.header("📥 Ingestion Hub")
     st.write(
-        "Upload structured data (CSV, Parquet, Excel) for automated PostgreSQL table creation "
-        "and DuckDB/Pandas indexing, or unstructured data (PDF, DOCX, TXT, MD) for hybrid dense + BM25 retrieval."
+        "Upload structured data (CSV, Parquet, Excel) for Pandas-ready blob storage and metadata "
+        "indexing, or unstructured data (PDF, DOCX, TXT, MD) for hybrid dense + BM25 retrieval."
     )
 
     # Top KPI Metrics Cards
@@ -452,8 +438,8 @@ with tab_qa:
     st.header("💬 Conversational Multi-Agent Q&A")
     st.write(
         "Ask natural language questions across your data catalog. "
-        "The LangGraph Supervisor automatically classifies intent, selects optimal execution strategies, "
-        "and handles greetings, clarifications, Text2SQL, sandboxed Python, or hybrid RAG."
+        "The LangGraph Supervisor automatically classifies intent and handles greetings, "
+        "clarifications, sandboxed Python analysis, or hybrid RAG."
     )
 
     # Engine Selector & Dataset Filter Controls
@@ -463,9 +449,7 @@ with tab_qa:
             "Execution Engine Selector:",
             [
                 "Auto Router (LangGraph Supervisor)",
-                "Strategy A: Dedicated PostgreSQL DB",
-                "Strategy B: In-Memory DuckDB",
-                "Strategy C: Sandboxed Python Pandas",
+                "Sandboxed Python Pandas",
                 "Unstructured Hybrid RAG",
             ],
             index=0,
@@ -514,13 +498,8 @@ with tab_qa:
 
                 # Expandable Panels
                 if msg.get("generated_code"):
-                    code_lang = (
-                        "python"
-                        if "pandas" in str(msg.get("suggested_strategy", "")).lower()
-                        else "sql"
-                    )
                     with st.expander("💻 Generated Query / Code", expanded=False):
-                        st.code(msg["generated_code"], language=code_lang)
+                        st.code(msg["generated_code"], language="python")
 
                 if msg.get("tabular_result"):
                     tab_df = client.tabular_result_to_dataframe(msg["tabular_result"])
@@ -579,35 +558,7 @@ with tab_qa:
                         dataset_ids=target_dataset_ids,
                         temperature=temperature,
                     )
-                elif engine_mode == "Strategy A: Dedicated PostgreSQL DB":
-                    resp = client.query_dedicated_db(
-                        user_prompt, dataset_ids=target_dataset_ids, temperature=temperature
-                    )
-                    resp_payload = {
-                        "content": resp.get("answer", ""),
-                        "generated_code": resp.get("sql_query"),
-                        "tabular_result": resp.get("tabular_result"),
-                        "thinking_process": resp.get("thinking_process"),
-                        "metrics": resp.get("metrics", {}),
-                        "token_usage": resp.get("token_usage", {}),
-                        "suggested_strategy": "dedicated_db",
-                        "intent": "STRUCTURED_QUERY",
-                    }
-                elif engine_mode == "Strategy B: In-Memory DuckDB":
-                    resp = client.query_duckdb(
-                        user_prompt, dataset_ids=target_dataset_ids, temperature=temperature
-                    )
-                    resp_payload = {
-                        "content": resp.get("answer", ""),
-                        "generated_code": resp.get("sql_query"),
-                        "tabular_result": resp.get("tabular_result"),
-                        "thinking_process": resp.get("thinking_process"),
-                        "metrics": resp.get("metrics", {}),
-                        "token_usage": resp.get("token_usage", {}),
-                        "suggested_strategy": "duckdb",
-                        "intent": "STRUCTURED_QUERY",
-                    }
-                elif engine_mode == "Strategy C: Sandboxed Python Pandas":
+                elif engine_mode == "Sandboxed Python Pandas":
                     resp = client.query_pandas_sandbox(
                         user_prompt, dataset_ids=target_dataset_ids, temperature=temperature
                     )
@@ -660,172 +611,3 @@ with tab_qa:
 
                 st.session_state["messages"].append(assistant_msg)
                 st.rerun()
-
-
-# =============================================================================
-# TAB 3: BENCHMARK ARENA
-# =============================================================================
-
-with tab_benchmark:
-    st.header("⚔️ 3-Way Structured Benchmark Arena")
-    st.write(
-        "Concurrently benchmark **Strategy A (Dedicated PostgreSQL)**, "
-        "**Strategy B (In-Memory DuckDB)**, and **Strategy C (Sandboxed Pandas)** on the exact same natural language query. "
-        "Evaluates execution equivalence, latency breakdown, token efficiency, and sandbox security."
-    )
-
-    # Benchmark Query Input & Presets
-    b_col1, b_col2 = st.columns([3, 1])
-    preset_queries = [
-        "What is the total revenue and count of transactions?",
-        "Show top 5 customers ordered by total purchase amount",
-        "Calculate the average order value grouped by product category",
-        "Count orders per month with status COMPLETED",
-        "Custom query...",
-    ]
-    with b_col2:
-        selected_preset = st.selectbox("Preset Query Template:", preset_queries, index=0)
-
-    with b_col1:
-        default_q = "" if selected_preset == "Custom query..." else selected_preset
-        benchmark_query = st.text_area(
-            "Benchmark Query:",
-            value=default_q,
-            placeholder="Enter a complex analytical query to test across all 3 engines...",
-            height=70,
-        )
-
-    if st.button("🚀 Run 3-Way Head-to-Head Benchmark", type="primary"):
-        if not benchmark_query.strip():
-            st.warning("Please enter a benchmark query to execute.")
-        else:
-            with st.spinner("Executing Strategy A, B, and C in parallel..."):
-                bench_res = client.query_benchmark(
-                    query=benchmark_query,
-                    include_raw_data=True,
-                    temperature=temperature,
-                )
-
-                if "error" in bench_res and not bench_res.get("strategy_a"):
-                    st.error(f"❌ Benchmark execution failed: {bench_res['error']}")
-                else:
-                    st.session_state["benchmark_history"].insert(0, bench_res)
-
-    # Render Latest Benchmark Result
-    if st.session_state["benchmark_history"]:
-        latest_bench = st.session_state["benchmark_history"][0]
-        st.divider()
-
-        # Summary Header & Consensus Status
-        summary = latest_bench.get("benchmark_summary", {})
-        consensus = summary.get("consensus_reached", False)
-        fastest = summary.get("fastest_strategy", "N/A")
-        token_winner = summary.get("most_token_efficient_strategy", "N/A")
-        total_lat = latest_bench.get("total_arena_latency_ms", 0.0)
-
-        c_cons, c_fast, c_tok, c_lat = st.columns(4)
-        with c_cons:
-            if consensus:
-                st.success("✅ **Consensus: EQUIVALENT**")
-            else:
-                st.warning("⚠️ **Consensus: DISCREPANCY**")
-        with c_fast:
-            st.info(f"⚡ **Fastest:** {fastest}")
-        with c_tok:
-            st.info(f"🪙 **Token Efficient:** {token_winner}")
-        with c_lat:
-            st.metric("Total Wall-Clock Latency", client.format_latency(total_lat))
-
-        if summary.get("summary_analysis"):
-            st.markdown(f"> 📝 *{summary.get('summary_analysis')}*")
-
-        st.subheader("📊 Side-by-Side Head-to-Head Results")
-
-        # 3-Column Arena Display
-        col_a, col_b, col_c = st.columns(3)
-
-        strategies = [
-            (col_a, "Strategy A (PostgreSQL)", latest_bench.get("strategy_a", {}), "sql"),
-            (col_b, "Strategy B (DuckDB)", latest_bench.get("strategy_b", {}), "sql"),
-            (col_c, "Strategy C (Pandas Sandbox)", latest_bench.get("strategy_c", {}), "python"),
-        ]
-
-        chart_data = []
-
-        for col, title, data, lang in strategies:
-            with col:
-                st.markdown(
-                    f'<div class="benchmark-col-header">{title}</div>', unsafe_allow_html=True
-                )
-                status = data.get("status", "UNKNOWN")
-                if status == "SUCCESS":
-                    st.markdown(
-                        '<span class="badge badge-success">Status: SUCCESS</span>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown(
-                        '<span class="badge badge-failed">Status: FAILED</span>',
-                        unsafe_allow_html=True,
-                    )
-                    if data.get("error"):
-                        st.caption(f"Error: {data.get('error')}")
-
-                # Metrics
-                met = data.get("metrics", {})
-                tok = data.get("token_usage", {})
-                lat_ms = met.get("total_latency_ms", 0.0)
-                tot_toks = tok.get("total_tokens", 0)
-
-                chart_data.append(
-                    {
-                        "Strategy": title.split()[1],
-                        "Latency (ms)": lat_ms,
-                        "Total Tokens": tot_toks,
-                        "Cost ($)": tok.get(
-                            "estimated_cost_usd",
-                            client.calculate_cost(
-                                tok.get("prompt_tokens", 0), tok.get("completion_tokens", 0)
-                            ),
-                        ),
-                    }
-                )
-
-                st.write(f"⏱️ **Latency:** {client.format_latency(lat_ms)}")
-                st.write(
-                    f"🪙 **Tokens:** {tot_toks} ({tok.get('prompt_tokens', 0)} / {tok.get('completion_tokens', 0)})"
-                )
-
-                # Model Thinking & Choices
-                if data.get("thinking_process"):
-                    render_model_thinking(data["thinking_process"], default_expanded=False)
-
-                # Answer
-                if data.get("answer"):
-                    st.markdown(f"**Answer:** {data.get('answer')}")
-
-                # Code Generated
-                if data.get("code_generated"):
-                    st.markdown("**Generated Code:**")
-                    st.code(data.get("code_generated"), language=lang)
-
-                # Tabular Result Preview
-                if data.get("tabular_result"):
-                    df_res = client.tabular_result_to_dataframe(data.get("tabular_result"))
-                    if not df_res.empty:
-                        st.markdown("**Result Table:**")
-                        st.dataframe(df_res.head(10), use_container_width=True)
-
-        # Comparative Charts Section
-        st.divider()
-        st.subheader("📈 Comparative Telemetry Breakdown")
-
-        if chart_data:
-            chart_df = pd.DataFrame(chart_data).set_index("Strategy")
-            ch_col1, ch_col2 = st.columns(2)
-            with ch_col1:
-                st.markdown("**⏱️ Latency Comparison (ms)**")
-                st.bar_chart(chart_df["Latency (ms)"])
-            with ch_col2:
-                st.markdown("**🪙 Token Consumption Comparison**")
-                st.bar_chart(chart_df["Total Tokens"])

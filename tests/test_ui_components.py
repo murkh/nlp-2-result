@@ -98,14 +98,14 @@ class TestBackendClient(unittest.TestCase):
             mock_post.assert_called_once()
 
     def test_query_agent_request_payload_construction(self):
-        """Verify query_agent serializes session_id, strategy, and dataset_ids."""
+        """Verify query_agent serializes session_id and dataset_ids."""
         mock_response = {
             "query": "What are total sales?",
             "session_id": "sess-42",
             "intent": "STRUCTURED_QUERY",
             "confidence": 0.98,
             "answer": "Total sales are $1,250,000.",
-            "suggested_strategy": "duckdb",
+            "suggested_strategy": "pandas_sandbox",
             "tabular_result": {"columns": ["total_sales"], "rows": [{"total_sales": 1250000}]},
             "metrics": {"total_latency_ms": 120.5},
             "token_usage": {"prompt_tokens": 150, "completion_tokens": 45, "total_tokens": 195},
@@ -115,7 +115,6 @@ class TestBackendClient(unittest.TestCase):
             res = self.client.query_agent(
                 query="What are total sales?",
                 session_id="sess-42",
-                suggested_strategy="duckdb",
                 dataset_ids=["ds-1"],
                 temperature=0.2,
             )
@@ -127,28 +126,12 @@ class TestBackendClient(unittest.TestCase):
                     "query": "What are total sales?",
                     "temperature": 0.2,
                     "session_id": "sess-42",
-                    "suggested_strategy": "duckdb",
                     "dataset_ids": ["ds-1"],
                 },
             )
 
-    def test_query_dedicated_db_and_duckdb_and_pandas(self):
-        """Verify individual structured engine API query methods."""
-        mock_db_res = {
-            "query": "Count users",
-            "answer": "There are 50 users.",
-            "sql_query": "SELECT count(*) FROM tbl_users LIMIT 20;",
-            "tabular_result": {"columns": ["count"], "rows": [{"count": 50}]},
-        }
-
-        with patch.object(self.client, "_post", return_value=mock_db_res):
-            res_a = self.client.query_dedicated_db("Count users")
-            self.assertEqual(res_a.get("answer"), "There are 50 users.")
-            self.assertEqual(res_a.get("sql_query"), "SELECT count(*) FROM tbl_users LIMIT 20;")
-
-            res_b = self.client.query_duckdb("Count users")
-            self.assertEqual(res_b.get("answer"), "There are 50 users.")
-
+    def test_query_pandas_sandbox(self):
+        """Verify the structured engine API query method."""
         mock_pandas_res = {
             "query": "Count users",
             "answer": "There are 50 users.",
@@ -157,9 +140,10 @@ class TestBackendClient(unittest.TestCase):
         }
 
         with patch.object(self.client, "_post", return_value=mock_pandas_res):
-            res_c = self.client.query_pandas_sandbox("Count users")
-            self.assertEqual(res_c.get("python_code"), "df.shape[0]")
-            self.assertTrue(res_c.get("security_report", {}).get("ast_passed"))
+            res = self.client.query_pandas_sandbox("Count users")
+            self.assertEqual(res.get("answer"), "There are 50 users.")
+            self.assertEqual(res.get("python_code"), "df.shape[0]")
+            self.assertTrue(res.get("security_report", {}).get("ast_passed"))
 
     def test_query_unstructured_rag_and_citations(self):
         """Verify unstructured hybrid RAG method and citation extraction."""
@@ -183,27 +167,6 @@ class TestBackendClient(unittest.TestCase):
             cit = res["citations"][0]
             self.assertEqual(cit.get("document_name"), "handbook.pdf")
             self.assertEqual(cit.get("page_number"), 3)
-
-    def test_query_benchmark_response_structure(self):
-        """Verify 3-way benchmark query method returns complete arena structure."""
-        mock_bench_res = {
-            "query": "Total revenue",
-            "strategy_a": {"strategy_name": "Strategy A", "status": "SUCCESS", "answer": "1000"},
-            "strategy_b": {"strategy_name": "Strategy B", "status": "SUCCESS", "answer": "1000"},
-            "strategy_c": {"strategy_name": "Strategy C", "status": "SUCCESS", "answer": "1000"},
-            "benchmark_summary": {
-                "fastest_strategy": "Strategy B",
-                "most_token_efficient_strategy": "Strategy B",
-                "consensus_reached": True,
-            },
-            "total_arena_latency_ms": 145.2,
-        }
-
-        with patch.object(self.client, "_post", return_value=mock_bench_res):
-            res = self.client.query_benchmark("Total revenue")
-            self.assertTrue(res.get("benchmark_summary", {}).get("consensus_reached"))
-            self.assertEqual(res.get("benchmark_summary", {}).get("fastest_strategy"), "Strategy B")
-            self.assertEqual(res.get("total_arena_latency_ms"), 145.2)
 
     def test_tabular_result_to_dataframe_conversion(self):
         """Verify tabular_result_to_dataframe correctly converts dicts to DataFrames."""
@@ -286,7 +249,7 @@ class TestUIHelpers(unittest.TestCase):
         from frontend.ui import render_model_thinking
 
         sample_thinking = {
-            "summary": "Processed with DuckDB",
+            "summary": "Processed with the Pandas sandbox",
             "steps": [
                 {
                     "step_number": 1,

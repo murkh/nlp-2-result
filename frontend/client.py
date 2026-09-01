@@ -148,7 +148,6 @@ class BackendClient:
         self,
         query: str,
         session_id: Optional[str] = None,
-        suggested_strategy: Optional[str] = None,
         dataset_ids: Optional[List[str]] = None,
         temperature: float = 0.0,
     ) -> Dict[str, Any]:
@@ -159,8 +158,6 @@ class BackendClient:
         }
         if session_id:
             payload["session_id"] = session_id
-        if suggested_strategy:
-            payload["suggested_strategy"] = suggested_strategy
         if dataset_ids:
             payload["dataset_ids"] = dataset_ids
 
@@ -179,43 +176,13 @@ class BackendClient:
     # Dedicated Execution Engines
     # -------------------------------------------------------------------------
 
-    def query_dedicated_db(
-        self,
-        query: str,
-        dataset_ids: Optional[List[str]] = None,
-        temperature: float = 0.0,
-    ) -> Dict[str, Any]:
-        """Strategy A: Dedicated PostgreSQL Text2SQL query engine."""
-        payload: Dict[str, Any] = {"query": query, "temperature": temperature}
-        if dataset_ids:
-            payload["dataset_ids"] = dataset_ids
-        try:
-            return self._post("/query/dedicated-db", json_data=payload)
-        except Exception as e:
-            return {"error": str(e)}
-
-    def query_duckdb(
-        self,
-        query: str,
-        dataset_ids: Optional[List[str]] = None,
-        temperature: float = 0.0,
-    ) -> Dict[str, Any]:
-        """Strategy B: In-Memory DuckDB query engine."""
-        payload: Dict[str, Any] = {"query": query, "temperature": temperature}
-        if dataset_ids:
-            payload["dataset_ids"] = dataset_ids
-        try:
-            return self._post("/query/duckdb", json_data=payload)
-        except Exception as e:
-            return {"error": str(e)}
-
     def query_pandas_sandbox(
         self,
         query: str,
         dataset_ids: Optional[List[str]] = None,
         temperature: float = 0.0,
     ) -> Dict[str, Any]:
-        """Strategy C: Sandboxed Python DataFrame execution."""
+        """Sandboxed Python DataFrame execution."""
         payload: Dict[str, Any] = {"query": query, "temperature": temperature}
         if dataset_ids:
             payload["dataset_ids"] = dataset_ids
@@ -237,26 +204,6 @@ class BackendClient:
             payload["dataset_ids"] = dataset_ids
         try:
             return self._post("/query/unstructured-rag", json_data=payload)
-        except Exception as e:
-            return {"error": str(e)}
-
-    def query_benchmark(
-        self,
-        query: str,
-        include_raw_data: bool = True,
-        dataset_ids: Optional[List[str]] = None,
-        temperature: float = 0.0,
-    ) -> Dict[str, Any]:
-        """3-Way Parallel Benchmark Arena comparing Strategy A, B, and C."""
-        payload: Dict[str, Any] = {
-            "query": query,
-            "include_raw_data": include_raw_data,
-            "temperature": temperature,
-        }
-        if dataset_ids:
-            payload["dataset_ids"] = dataset_ids
-        try:
-            return self._post("/query/benchmark", json_data=payload)
         except Exception as e:
             return {"error": str(e)}
 

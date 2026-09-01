@@ -1,13 +1,13 @@
 [project]
 name = "multiagent-knowledge-qa"
 version = "0.1.0"
-description = "Token-efficient Multi-Agent Knowledge Base Q&A platform supporting structured and unstructured data with three execution strategies and benchmarking."
+description = "Token-efficient Multi-Agent Knowledge Base Q&A platform answering structured questions with a sandboxed Python/Pandas engine and document questions with hybrid RAG."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
     { name = "Engineering Team", email = "engineering@example.com" }
 ]
-keywords = ["rag", "multi-agent", "text2sql", "duckdb", "pandas", "pgvector", "langfuse", "ragas"]
+keywords = ["rag", "multi-agent", "pandas", "sandbox", "pgvector", "langfuse", "ragas"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -31,13 +31,11 @@ dependencies = [
     "pgvector>=0.3.2",
 
     # Structured Data Processing
-    "duckdb>=1.0.0",
     "pandas>=2.2.2",
     "numpy>=1.26.0",
     "polars>=1.5.0",
     "pyarrow>=17.0.0",
     "openpyxl>=3.1.5",
-    "sqlglot>=25.10.0",
 
     # Unstructured Extraction & Search
     "pypdf>=4.3.1",
